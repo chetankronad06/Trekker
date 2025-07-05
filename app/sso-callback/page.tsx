@@ -35,19 +35,19 @@ export default function SSOCallback() {
           if (response.ok) {
             const data = await response.json()
             console.log("✅ Google user synced:", data.message)
-            setSyncStatus("Account synced! Redirecting...")
+            setSyncStatus("Account synced! Redirecting to sign-in...")
           } else {
             console.error("❌ Failed to sync Google user:", response.status)
-            setSyncStatus("Sync completed. Redirecting...")
+            setSyncStatus("Redirecting to sign-in...")
           }
         } catch (error) {
           console.error("❌ Error syncing Google user:", error)
-          setSyncStatus("Redirecting to dashboard...")
+          setSyncStatus("Redirecting to sign-in...")
         }
 
-        // Redirect to dashboard after sync attempt
+        // Redirect to sign-in page instead of dashboard
         setTimeout(() => {
-          router.push("/dashboard")
+          router.push("/sign-in")
         }, 1500)
       } else if (isLoaded && !isSignedIn) {
         // If not signed in after loading, redirect to sign-in

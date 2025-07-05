@@ -61,7 +61,7 @@ export default function SignUpPage() {
             <div className="mb-4">
               <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto" />
             </div>
-            <p className="text-gray-600">You're already signed in. Redirecting to dashboard...</p>
+            <p className="text-gray-600">You&apos;re already signed in. Redirecting to dashboard...</p>
           </CardContent>
         </Card>
       </div>
@@ -120,9 +120,10 @@ export default function SignUpPage() {
 
       await signUp.prepareEmailAddressVerification({ strategy: "email_code" })
       setPendingVerification(true)
-    } catch (err: any) {
-      console.error("Sign up error:", err)
-      setError(err.errors?.[0]?.message || "An error occurred during sign up")
+    } catch (err: unknown) {
+      console.error("Error:", err)
+      const errorMessage = err instanceof Error ? err.message : "An error occurred"
+      setError(errorMessage)
     } finally {
       setIsLoading(false)
     }
@@ -160,11 +161,13 @@ export default function SignUpPage() {
           // Don't block the flow if sync fails
         }
 
-        router.push("/dashboard")
+        // Redirect to sign-in page as intended
+        router.push("/sign-in")
       }
-    } catch (err: any) {
-      console.error("Verification error:", err)
-      setError(err.errors?.[0]?.message || "Invalid verification code")
+    } catch (err: unknown) {
+      console.error("Error:", err)
+      const errorMessage = err instanceof Error ? err.message : "An error occurred"
+      setError(errorMessage)
     } finally {
       setIsLoading(false)
     }
@@ -177,50 +180,27 @@ export default function SignUpPage() {
       await signUp.authenticateWithRedirect({
         strategy: "oauth_google",
         redirectUrl: "/sso-callback",
-        redirectUrlComplete: "/dashboard",
+        redirectUrlComplete: "/sign-in", // Changed from /dashboard to /sign-in
       })
-    } catch (err: any) {
-      console.error("Google sign up error:", err)
-      setError(err.errors?.[0]?.message || "Google sign up failed")
+    } catch (err: unknown) {
+      console.error("Error:", err)
+      const errorMessage = err instanceof Error ? err.message : "An error occurred"
+      setError(errorMessage)
     }
   }
 
   if (pendingVerification) {
     return (
-      <div
-        className="min-h-screen flex items-center justify-center p-4"
-        style={{
-          background: "linear-gradient(135deg, #f8fafc 0%, #e0f2fe 50%, #e0e7ff 100%)",
-        }}
-      >
-        <Card
-          className="w-full max-w-md shadow-2xl border-0"
-          style={{
-            backgroundColor: "rgba(255, 255, 255, 0.8)",
-            backdropFilter: "blur(10px)",
-          }}
-        >
+      <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+        <Card className="w-full max-w-md shadow-2xl border-0 bg-white/80 backdrop-blur-sm">
           <CardHeader className="text-center space-y-4">
-            <div
-              className="mx-auto w-12 h-12 rounded-full flex items-center justify-center"
-              style={{
-                background: "linear-gradient(135deg, #2563eb, #4f46e5)",
-              }}
-            >
+            <div className="mx-auto w-12 h-12 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full flex items-center justify-center">
               <Mail className="w-6 h-6 text-white" />
             </div>
-            <CardTitle
-              className="text-2xl font-bold"
-              style={{
-                background: "linear-gradient(135deg, #2563eb, #4f46e5)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                backgroundClip: "text",
-              }}
-            >
+            <CardTitle className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
               Verify Your Email
             </CardTitle>
-            <CardDescription>We've sent a verification code to {formData.email}</CardDescription>
+            <CardDescription>We&apos;ve sent a verification code to {formData.email}</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleVerification} className="space-y-4">
@@ -247,10 +227,7 @@ export default function SignUpPage() {
 
               <Button
                 type="submit"
-                className="w-full text-white"
-                style={{
-                  background: "linear-gradient(135deg, #2563eb, #4f46e5)",
-                }}
+                className="w-full text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
                 disabled={isLoading || code.length !== 6}
               >
                 {isLoading ? (
@@ -273,37 +250,13 @@ export default function SignUpPage() {
   }
 
   return (
-    <div
-      className="min-h-screen flex items-center justify-center p-4"
-      style={{
-        background: "linear-gradient(135deg, #f8fafc 0%, #e0f2fe 50%, #e0e7ff 100%)",
-      }}
-    >
-      <Card
-        className="w-full max-w-md shadow-2xl border-0"
-        style={{
-          backgroundColor: "rgba(255, 255, 255, 0.8)",
-          backdropFilter: "blur(10px)",
-        }}
-      >
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+      <Card className="w-full max-w-md shadow-2xl border-0 bg-white/80 backdrop-blur-sm">
         <CardHeader className="text-center space-y-4">
-          <div
-            className="mx-auto w-12 h-12 rounded-full flex items-center justify-center"
-            style={{
-              background: "linear-gradient(135deg, #2563eb, #4f46e5)",
-            }}
-          >
+          <div className="mx-auto w-12 h-12 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full flex items-center justify-center">
             <Mountain className="w-6 h-6 text-white" />
           </div>
-          <CardTitle
-            className="text-2xl font-bold"
-            style={{
-              background: "linear-gradient(135deg, #2563eb, #4f46e5)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              backgroundClip: "text",
-            }}
-          >
+          <CardTitle className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
             Join Trekker
           </CardTitle>
           <CardDescription>Start tracking your travel expenses today</CardDescription>
@@ -515,10 +468,7 @@ export default function SignUpPage() {
 
             <Button
               type="submit"
-              className="w-full text-white"
-              style={{
-                background: "linear-gradient(135deg, #2563eb, #4f46e5)",
-              }}
+              className="w-full text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
               disabled={isLoading || !isPasswordValid || !doPasswordsMatch}
             >
               {isLoading ? (
