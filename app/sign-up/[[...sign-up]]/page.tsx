@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
-import { useSignUp, useUser } from "@clerk/nextjs"
+import { useSignUp, useUser, useClerk } from "@clerk/nextjs"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -17,6 +17,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 export default function SignUpPage() {
   const { isLoaded, signUp, setActive } = useSignUp()
   const { user, isSignedIn } = useUser()
+  const { signOut } = useClerk()
   const router = useRouter()
 
   const [formData, setFormData] = useState({
@@ -33,12 +34,12 @@ export default function SignUpPage() {
   const [pendingVerification, setPendingVerification] = useState(false)
   const [code, setCode] = useState("")
 
-  // Redirect if user is already signed in
+  // Redirect if user is already signed in (but not during verification)
   useEffect(() => {
-    if (isSignedIn && user) {
+    if (isSignedIn && user && !pendingVerification) {
       router.push("/dashboard")
     }
-  }, [isSignedIn, user, router])
+  }, [isSignedIn, user, router, pendingVerification])
 
   // Show loading while checking authentication status
   if (!isLoaded) {
@@ -52,7 +53,7 @@ export default function SignUpPage() {
     )
   }
 
-  // If user is signed in, show redirect message
+  // If user is signed in and not in verification flow, show redirect message
   if (isSignedIn && !pendingVerification) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
@@ -61,7 +62,7 @@ export default function SignUpPage() {
             <div className="mb-4">
               <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto" />
             </div>
-            <p className="text-gray-600">You&apos;re already signed in. Redirecting to dashboard...</p>
+            <p className="text-gray-600">You're already signed in. Redirecting to dashboard...</p>
           </CardContent>
         </Card>
       </div>
@@ -146,7 +147,8 @@ export default function SignUpPage() {
 
         // Sync user data to Supabase
         try {
-          await fetch("/api/sync-user", {
+          console.log("🔄 Syncing user to database...")
+          const response = await fetch("/api/sync-user", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -156,13 +158,26 @@ export default function SignUpPage() {
               lastName: formData.lastName,
             }),
           })
+
+          if (response.ok) {
+            const data = await response.json()
+            console.log("✅ User synced successfully:", data.message)
+          } else {
+            console.error("❌ Failed to sync user:", response.status)
+          }
         } catch (syncError) {
-          console.error("User sync error:", syncError)
+          console.error("❌ User sync error:", syncError)
           // Don't block the flow if sync fails
         }
 
-        // Redirect to sign-in page as intended
-        router.push("/sign-in")
+        // Sign out the user and redirect to sign-in
+        console.log("🔄 Signing out user to redirect to sign-in...")
+        await signOut()
+
+        // Small delay to ensure sign-out completes
+        setTimeout(() => {
+          router.push("/sign-in")
+        }, 500)
       }
     } catch (err: unknown) {
       console.error("Error:", err)
@@ -180,7 +195,7 @@ export default function SignUpPage() {
       await signUp.authenticateWithRedirect({
         strategy: "oauth_google",
         redirectUrl: "/sso-callback",
-        redirectUrlComplete: "/sign-in", // Changed from /dashboard to /sign-in
+        redirectUrlComplete: "/sso-callback", // Changed to go through our callback
       })
     } catch (err: unknown) {
       console.error("Error:", err)
@@ -200,7 +215,7 @@ export default function SignUpPage() {
             <CardTitle className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
               Verify Your Email
             </CardTitle>
-            <CardDescription>We&apos;ve sent a verification code to {formData.email}</CardDescription>
+            <CardDescription>We've sent a verification code to {formData.email}</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleVerification} className="space-y-4">

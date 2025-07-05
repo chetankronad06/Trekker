@@ -1,12 +1,13 @@
 "use client"
 
 import { AuthenticateWithRedirectCallback } from "@clerk/nextjs"
-import { useUser } from "@clerk/nextjs"
+import { useUser, useClerk } from "@clerk/nextjs"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 
 export default function SSOCallback() {
   const { user, isLoaded, isSignedIn } = useUser()
+  const { signOut } = useClerk()
   const router = useRouter()
   const [syncStatus, setSyncStatus] = useState("Completing sign-in...")
 
@@ -35,20 +36,24 @@ export default function SSOCallback() {
           if (response.ok) {
             const data = await response.json()
             console.log("✅ Google user synced:", data.message)
-            setSyncStatus("Account synced! Redirecting to sign-in...")
+            setSyncStatus("Account synced! Signing out and redirecting to sign-in...")
           } else {
             console.error("❌ Failed to sync Google user:", response.status)
-            setSyncStatus("Redirecting to sign-in...")
+            setSyncStatus("Signing out and redirecting to sign-in...")
           }
         } catch (error) {
           console.error("❌ Error syncing Google user:", error)
-          setSyncStatus("Redirecting to sign-in...")
+          setSyncStatus("Signing out and redirecting to sign-in...")
         }
 
-        // Redirect to sign-in page instead of dashboard
+        // Sign out the user and redirect to sign-in page
+        console.log("🔄 Signing out user to redirect to sign-in...")
+        await signOut()
+
+        // Small delay to ensure sign-out completes
         setTimeout(() => {
           router.push("/sign-in")
-        }, 1500)
+        }, 1000)
       } else if (isLoaded && !isSignedIn) {
         // If not signed in after loading, redirect to sign-in
         router.push("/sign-in")
@@ -56,7 +61,7 @@ export default function SSOCallback() {
     }
 
     syncGoogleUser()
-  }, [isLoaded, isSignedIn, user, router])
+  }, [isLoaded, isSignedIn, user, router, signOut])
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
