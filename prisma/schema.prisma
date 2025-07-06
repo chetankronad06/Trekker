@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {
@@ -18,4 +19,6 @@ model User {
   updatedAt        DateTime @updatedAt @map("updated_at")
 
   @@map("users")
+  @@index([clerkId])
+  @@index([email])
 }

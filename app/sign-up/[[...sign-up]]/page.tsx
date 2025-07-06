@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
-import { Eye, EyeOff, Mountain, Mail, Lock, User, Check, X, Loader2 } from "lucide-react"
+import { Eye, EyeOff, MapPin, Mail, Lock, User, Check, X, Loader2, AlertTriangle } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
 export default function SignUpPage() {
@@ -37,37 +37,9 @@ export default function SignUpPage() {
   // Redirect if user is already signed in (but not during verification)
   useEffect(() => {
     if (isSignedIn && user && !pendingVerification) {
-      router.push("/dashboard")
+      router.push("/profile")
     }
   }, [isSignedIn, user, router, pendingVerification])
-
-  // Show loading while checking authentication status
-  if (!isLoaded) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-4">
-        <div className="flex items-center gap-2">
-          <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
-          <span className="text-gray-600">Loading...</span>
-        </div>
-      </div>
-    )
-  }
-
-  // If user is signed in and not in verification flow, show redirect message
-  if (isSignedIn && !pendingVerification) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-4">
-        <Card className="w-full max-w-md shadow-2xl border-0">
-          <CardContent className="p-6 text-center">
-            <div className="mb-4">
-              <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto" />
-            </div>
-            <p className="text-gray-600">You're already signed in. Redirecting to dashboard...</p>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
 
   // Password strength validation
   const getPasswordStrength = (password: string) => {
@@ -95,16 +67,44 @@ export default function SignUpPage() {
     setError("")
   }
 
+  const syncUserToDatabase = async (clerkId: string, email: string, firstName: string, lastName: string) => {
+    try {
+      console.log("🔄 Syncing user to database...")
+      const response = await fetch("/api/user/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clerkId,
+          email,
+          firstName,
+          lastName,
+        }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        console.log("✅ User synced successfully:", data.message)
+        return true
+      } else {
+        console.error("❌ Failed to sync user:", response.status)
+        return false
+      }
+    } catch (syncError) {
+      console.error("❌ User sync error:", syncError)
+      return false
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!isLoaded) return
     if (!isPasswordValid) {
-      setError("Password does not meet strength requirements")
+      setError("🔐 Password needs to be stronger for your travel security!")
       return
     }
     if (!doPasswordsMatch) {
-      setError("Passwords do not match")
+      setError("🔄 Passwords don't match. Please double-check!")
       return
     }
 
@@ -123,8 +123,12 @@ export default function SignUpPage() {
       setPendingVerification(true)
     } catch (err: unknown) {
       console.error("Error:", err)
-      const errorMessage = err instanceof Error ? err.message : "An error occurred"
-      setError(errorMessage)
+      if (err && typeof err === "object" && "errors" in err) {
+        const errors = err.errors as Array<{ message?: string }>
+        setError(errors[0]?.message || "🚫 Unable to create account. Please try again.")
+      } else {
+        setError("🚫 Something went wrong. Please try again.")
+      }
     } finally {
       setIsLoading(false)
     }
@@ -142,33 +146,11 @@ export default function SignUpPage() {
         code,
       })
 
-      if (completeSignUp.status === "complete") {
+      if (completeSignUp.status === "complete" && completeSignUp.createdSessionId && completeSignUp.createdUserId) {
         await setActive({ session: completeSignUp.createdSessionId })
 
         // Sync user data to Supabase
-        try {
-          console.log("🔄 Syncing user to database...")
-          const response = await fetch("/api/sync-user", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              clerkId: completeSignUp.createdUserId,
-              email: formData.email,
-              firstName: formData.firstName,
-              lastName: formData.lastName,
-            }),
-          })
-
-          if (response.ok) {
-            const data = await response.json()
-            console.log("✅ User synced successfully:", data.message)
-          } else {
-            console.error("❌ Failed to sync user:", response.status)
-          }
-        } catch (syncError) {
-          console.error("❌ User sync error:", syncError)
-          // Don't block the flow if sync fails
-        }
+        await syncUserToDatabase(completeSignUp.createdUserId, formData.email, formData.firstName, formData.lastName)
 
         // Sign out the user and redirect to sign-in
         console.log("🔄 Signing out user to redirect to sign-in...")
@@ -181,8 +163,12 @@ export default function SignUpPage() {
       }
     } catch (err: unknown) {
       console.error("Error:", err)
-      const errorMessage = err instanceof Error ? err.message : "An error occurred"
-      setError(errorMessage)
+      if (err && typeof err === "object" && "errors" in err) {
+        const errors = err.errors as Array<{ message?: string }>
+        setError(errors[0]?.message || "🚫 Verification failed. Please try again.")
+      } else {
+        setError("🚫 Something went wrong. Please try again.")
+      }
     } finally {
       setIsLoading(false)
     }
@@ -195,38 +181,47 @@ export default function SignUpPage() {
       await signUp.authenticateWithRedirect({
         strategy: "oauth_google",
         redirectUrl: "/sso-callback",
-        redirectUrlComplete: "/sso-callback", // Changed to go through our callback
+        redirectUrlComplete: "/sso-callback",
       })
     } catch (err: unknown) {
       console.error("Error:", err)
-      const errorMessage = err instanceof Error ? err.message : "An error occurred"
-      setError(errorMessage)
+      setError("🌐 Google sign-up failed. Please try again or use email.")
     }
+  }
+
+  if (!isLoaded) {
+    return null // This will show loading.tsx
   }
 
   if (pendingVerification) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
-        <Card className="w-full max-w-md shadow-2xl border-0 bg-white/80 backdrop-blur-sm">
+      <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-gray-900 via-gray-800 to-black">
+        <Card className="w-full max-w-md shadow-2xl border-0 bg-gray-800/90 backdrop-blur-sm">
           <CardHeader className="text-center space-y-4">
-            <div className="mx-auto w-12 h-12 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full flex items-center justify-center">
+            <div className="mx-auto w-12 h-12 bg-gradient-to-r from-green-500 to-green-600 rounded-full flex items-center justify-center">
               <Mail className="w-6 h-6 text-white" />
             </div>
-            <CardTitle className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-              Verify Your Email
+            <CardTitle className="text-2xl font-bold bg-gradient-to-r from-green-400 to-green-500 bg-clip-text text-transparent">
+              Check Your Email
             </CardTitle>
-            <CardDescription>We've sent a verification code to {formData.email}</CardDescription>
+            <CardDescription className="text-gray-300">
+              {"We've sent a verification code to "}
+              <span className="text-green-400">{formData.email}</span>
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleVerification} className="space-y-4">
               {error && (
-                <Alert className="border-red-200 bg-red-50">
-                  <AlertDescription className="text-red-700">{error}</AlertDescription>
+                <Alert className="border-red-500/50 bg-red-500/10">
+                  <AlertTriangle className="h-4 w-4 text-red-400" />
+                  <AlertDescription className="text-red-300">{error}</AlertDescription>
                 </Alert>
               )}
 
               <div className="space-y-2">
-                <Label htmlFor="code">Verification Code</Label>
+                <Label htmlFor="code" className="text-gray-300">
+                  Verification Code
+                </Label>
                 <Input
                   id="code"
                   name="code"
@@ -234,7 +229,7 @@ export default function SignUpPage() {
                   placeholder="Enter 6-digit code"
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
-                  className="text-center text-lg tracking-widest"
+                  className="text-center text-lg tracking-widest bg-gray-700/50 border-gray-600 text-white placeholder:text-gray-400 focus:border-green-500 focus:ring-green-500"
                   maxLength={6}
                   required
                 />
@@ -242,7 +237,7 @@ export default function SignUpPage() {
 
               <Button
                 type="submit"
-                className="w-full text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white"
                 disabled={isLoading || code.length !== 6}
               >
                 {isLoading ? (
@@ -251,13 +246,13 @@ export default function SignUpPage() {
                     Verifying...
                   </>
                 ) : (
-                  "Verify Email"
+                  "Verify & Complete Setup"
                 )}
               </Button>
-            </form>
 
-            {/* CAPTCHA container for Clerk */}
-            <div id="clerk-captcha" className="mt-4"></div>
+              {/* CAPTCHA container for Clerk */}
+              <div id="clerk-captcha"></div>
+            </form>
           </CardContent>
         </Card>
       </div>
@@ -265,23 +260,23 @@ export default function SignUpPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
-      <Card className="w-full max-w-md shadow-2xl border-0 bg-white/80 backdrop-blur-sm">
-        <CardHeader className="text-center space-y-4">
-          <div className="mx-auto w-12 h-12 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full flex items-center justify-center">
-            <Mountain className="w-6 h-6 text-white" />
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-gray-900 via-gray-800 to-black">
+      <Card className="w-full max-w-md shadow-2xl border-0 bg-gray-800/90 backdrop-blur-sm">
+        <CardHeader className="text-center space-y-4 pb-6">
+          <div className="mx-auto w-12 h-12 bg-gradient-to-r from-green-500 to-green-600 rounded-full flex items-center justify-center">
+            <MapPin className="w-6 h-6 text-white" />
           </div>
-          <CardTitle className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-            Join Trekker
+          <CardTitle className="text-2xl font-bold bg-gradient-to-r from-green-400 to-green-500 bg-clip-text text-transparent">
+            Start Your Journey
           </CardTitle>
-          <CardDescription>Start tracking your travel expenses today</CardDescription>
+          <CardDescription className="text-gray-300">Create your Trekker account and explore the world</CardDescription>
         </CardHeader>
 
         <CardContent className="space-y-6">
           <Button
             onClick={handleGoogleSignUp}
             variant="outline"
-            className="w-full border-gray-300 hover:bg-gray-50 bg-transparent"
+            className="w-full border-gray-600 hover:bg-gray-700 bg-gray-700/50 text-white hover:text-white"
             disabled={isLoading}
           >
             <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
@@ -307,23 +302,26 @@ export default function SignUpPage() {
 
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
-              <Separator className="w-full" />
+              <Separator className="w-full bg-gray-600" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-white px-2 text-gray-500">Or continue with email</span>
+              <span className="bg-gray-800 px-2 text-gray-400">Or create with email</span>
             </div>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <Alert className="border-red-200 bg-red-50">
-                <AlertDescription className="text-red-700">{error}</AlertDescription>
+              <Alert className="border-red-500/50 bg-red-500/10">
+                <AlertTriangle className="h-4 w-4 text-red-400" />
+                <AlertDescription className="text-red-300">{error}</AlertDescription>
               </Alert>
             )}
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="firstName">First Name</Label>
+                <Label htmlFor="firstName" className="text-gray-300">
+                  First Name
+                </Label>
                 <div className="relative">
                   <User className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                   <Input
@@ -333,13 +331,15 @@ export default function SignUpPage() {
                     placeholder="John"
                     value={formData.firstName}
                     onChange={handleInputChange}
-                    className="pl-10"
+                    className="pl-10 bg-gray-700/50 border-gray-600 text-white placeholder:text-gray-400 focus:border-green-500 focus:ring-green-500"
                     required
                   />
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="lastName">Last Name</Label>
+                <Label htmlFor="lastName" className="text-gray-300">
+                  Last Name
+                </Label>
                 <div className="relative">
                   <User className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                   <Input
@@ -349,7 +349,7 @@ export default function SignUpPage() {
                     placeholder="Doe"
                     value={formData.lastName}
                     onChange={handleInputChange}
-                    className="pl-10"
+                    className="pl-10 bg-gray-700/50 border-gray-600 text-white placeholder:text-gray-400 focus:border-green-500 focus:ring-green-500"
                     required
                   />
                 </div>
@@ -357,24 +357,28 @@ export default function SignUpPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email" className="text-gray-300">
+                Email
+              </Label>
               <div className="relative">
                 <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                 <Input
                   id="email"
                   name="email"
                   type="email"
-                  placeholder="john@example.com"
+                  placeholder="your@email.com"
                   value={formData.email}
                   onChange={handleInputChange}
-                  className="pl-10"
+                  className="pl-10 bg-gray-700/50 border-gray-600 text-white placeholder:text-gray-400 focus:border-green-500 focus:ring-green-500"
                   required
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password" className="text-gray-300">
+                Password
+              </Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                 <Input
@@ -384,13 +388,13 @@ export default function SignUpPage() {
                   placeholder="Create a strong password"
                   value={formData.password}
                   onChange={handleInputChange}
-                  className="pl-10 pr-10"
+                  className="pl-10 pr-10 bg-gray-700/50 border-gray-600 text-white placeholder:text-gray-400 focus:border-green-500 focus:ring-green-500"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-3 text-gray-400 hover:text-gray-300"
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -399,14 +403,14 @@ export default function SignUpPage() {
               {formData.password && (
                 <div className="space-y-2 text-sm">
                   <div className="flex items-center justify-between">
-                    <span className="text-gray-600">Password Strength:</span>
+                    <span className="text-gray-400">Password Strength:</span>
                     <span
                       className={`font-medium ${
                         passwordStrength.score >= 4
-                          ? "text-green-600"
+                          ? "text-green-400"
                           : passwordStrength.score >= 3
-                            ? "text-yellow-600"
-                            : "text-red-600"
+                            ? "text-yellow-400"
+                            : "text-red-400"
                       }`}
                     >
                       {passwordStrength.score >= 4 ? "Strong" : passwordStrength.score >= 3 ? "Medium" : "Weak"}
@@ -422,14 +426,14 @@ export default function SignUpPage() {
                     }).map(([key, label]) => (
                       <div key={key} className="flex items-center gap-2">
                         {passwordStrength.checks[key as keyof typeof passwordStrength.checks] ? (
-                          <Check className="h-3 w-3 text-green-600" />
+                          <Check className="h-3 w-3 text-green-400" />
                         ) : (
-                          <X className="h-3 w-3 text-red-600" />
+                          <X className="h-3 w-3 text-red-400" />
                         )}
                         <span
                           className={
                             passwordStrength.checks[key as keyof typeof passwordStrength.checks]
-                              ? "text-green-600"
+                              ? "text-green-400"
                               : "text-gray-500"
                           }
                         >
@@ -443,7 +447,9 @@ export default function SignUpPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirm Password</Label>
+              <Label htmlFor="confirmPassword" className="text-gray-300">
+                Confirm Password
+              </Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                 <Input
@@ -453,13 +459,13 @@ export default function SignUpPage() {
                   placeholder="Confirm your password"
                   value={formData.confirmPassword}
                   onChange={handleInputChange}
-                  className="pl-10 pr-10"
+                  className="pl-10 pr-10 bg-gray-700/50 border-gray-600 text-white placeholder:text-gray-400 focus:border-green-500 focus:ring-green-500"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-3 text-gray-400 hover:text-gray-300"
                 >
                   {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -468,13 +474,13 @@ export default function SignUpPage() {
                 <div className="flex items-center gap-2 text-sm">
                   {doPasswordsMatch ? (
                     <>
-                      <Check className="h-3 w-3 text-green-600" />
-                      <span className="text-green-600">Passwords match</span>
+                      <Check className="h-3 w-3 text-green-400" />
+                      <span className="text-green-400">Passwords match</span>
                     </>
                   ) : (
                     <>
-                      <X className="h-3 w-3 text-red-600" />
-                      <span className="text-red-600">Passwords do not match</span>
+                      <X className="h-3 w-3 text-red-400" />
+                      <span className="text-red-400">Passwords do not match</span>
                     </>
                   )}
                 </div>
@@ -483,7 +489,7 @@ export default function SignUpPage() {
 
             <Button
               type="submit"
-              className="w-full text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+              className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white"
               disabled={isLoading || !isPasswordValid || !doPasswordsMatch}
             >
               {isLoading ? (
@@ -492,18 +498,18 @@ export default function SignUpPage() {
                   Creating Account...
                 </>
               ) : (
-                "Create Account"
+                "Create Traveler Account"
               )}
             </Button>
 
             {/* CAPTCHA container for Clerk */}
-            <div id="clerk-captcha" className="mt-4"></div>
+            <div id="clerk-captcha"></div>
           </form>
 
-          <div className="text-center text-sm text-gray-600">
-            Already have an account?{" "}
-            <Link href="/sign-in" className="font-medium text-blue-600 hover:text-blue-500">
-              Sign in
+          <div className="text-center text-sm text-gray-400">
+            {"Already have an account? "}
+            <Link href="/sign-in" className="font-medium text-green-400 hover:text-green-300">
+              Sign in here
             </Link>
           </div>
         </CardContent>

@@ -1,3 +1,4 @@
+/** @type {import('next').NextConfig} */
 const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
@@ -7,6 +8,15 @@ const nextConfig = {
   },
   images: {
     unoptimized: true,
+    domains: ['img.clerk.com'],
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'img.clerk.com',
+        port: '',
+        pathname: '/**',
+      },
+    ],
   },
   experimental: {
     optimizePackageImports: ['lucide-react'],

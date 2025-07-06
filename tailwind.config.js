@@ -1,4 +1,7 @@
-module.exports = {
+/** @type {import('tailwindcss').Config} */
+import tailwindcssAnimate from "tailwindcss-animate";
+
+const config = {
   darkMode: ["class"],
   content: [
     "./pages/**/*.{js,ts,jsx,tsx,mdx}",
@@ -11,7 +14,7 @@ module.exports = {
   theme: {
     container: {
       center: true,
-      padding: "2rem",
+      padding: "1rem",
       screens: {
         "2xl": "1400px",
       },
@@ -51,6 +54,24 @@ module.exports = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        // Travel-friendly color scheme
+        travel: {
+          dark: "#0f0f0f",
+          gray: {
+            900: "#111111",
+            800: "#1f1f1f",
+            700: "#2a2a2a",
+            600: "#404040",
+            500: "#6b7280",
+            400: "#9ca3af",
+            300: "#d1d5db",
+          },
+          green: {
+            600: "#059669",
+            500: "#10b981",
+            400: "#34d399",
+          },
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -71,7 +92,12 @@ module.exports = {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
       },
+      screens: {
+        xs: "475px",
+      },
     },
   },
-  plugins: [require("tailwindcss-animate")],
-}
+  plugins: [tailwindcssAnimate],
+};
+
+export default config;

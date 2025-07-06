@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build",
+    "build": "prisma generate && prisma db push && next build",
     "start": "next start",
     "lint": "next lint",
     "postinstall": "prisma generate",
@@ -12,7 +12,9 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
-    "db:seed": "prisma db seed"
+    "db:reset": "prisma migrate reset",
+    "db:seed": "prisma db seed",
+    "db:test": "node -e \"console.log('Testing DB...'); require('./lib/prisma').testDatabaseConnection().then(r => console.log(r))\""
   },
   "dependencies": {
     "@clerk/nextjs": "^6.23.3",

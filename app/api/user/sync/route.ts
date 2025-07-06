@@ -1,13 +1,32 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
-import { currentUser } from "@clerk/nextjs/server"
+import { prisma, testDatabaseConnection } from "@/lib/prisma"
 
 export async function POST(request: NextRequest) {
   try {
-    const { clerkId, email, firstName, lastName, profileImageUrl } = await request.json()
+    // Test database connection first
+    const connectionTest = await testDatabaseConnection()
+    if (!connectionTest.success) {
+      return NextResponse.json(
+        {
+          error: "Database connection failed",
+          details: connectionTest.error,
+          suggestion: connectionTest.suggestion,
+        },
+        { status: 500 },
+      )
+    }
+
+    const body = await request.json().catch(() => ({}))
+    const { clerkId, email, firstName, lastName, profileImageUrl } = body
 
     if (!clerkId || !email) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+      return NextResponse.json(
+        {
+          error: "Missing required fields",
+          required: ["clerkId", "email"],
+        },
+        { status: 400 },
+      )
     }
 
     console.log("🔄 Syncing user to database:", {
@@ -63,64 +82,23 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error("❌ Error syncing user:", error)
+
+    // Handle specific Prisma errors
+    if (error instanceof Error) {
+      if (error.message.includes("Unique constraint")) {
+        return NextResponse.json(
+          {
+            error: "User already exists",
+            details: "A user with this email or Clerk ID already exists",
+          },
+          { status: 409 },
+        )
+      }
+    }
+
     return NextResponse.json(
       {
         error: "Failed to sync user",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 },
-    )
-  }
-}
-
-// GET endpoint to fetch user data
-export async function GET() {
-  try {
-    const user = await currentUser()
-
-    if (!user) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
-    }
-
-    console.log("🔍 Fetching user data for:", user.id)
-
-    const dbUser = await prisma.user.findUnique({
-      where: { clerkId: user.id },
-    })
-
-    if (!dbUser) {
-      // If user doesn't exist in DB, create them
-      console.log("👤 User not found in DB, creating new user...")
-
-      const newUser = await prisma.user.create({
-        data: {
-          clerkId: user.id,
-          email: user.emailAddresses[0]?.emailAddress || "",
-          firstName: user.firstName || "Unknown",
-          lastName: user.lastName || "User",
-          profileImageUrl: user.imageUrl || null,
-        },
-      })
-
-      console.log("✅ New user created from GET request:", newUser.id)
-
-      return NextResponse.json({
-        user: newUser,
-        isNew: true,
-      })
-    }
-
-    console.log("✅ User data fetched successfully:", dbUser.id)
-
-    return NextResponse.json({
-      user: dbUser,
-      isNew: false,
-    })
-  } catch (error) {
-    console.error("❌ Error fetching user:", error)
-    return NextResponse.json(
-      {
-        error: "Failed to fetch user",
         details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 },

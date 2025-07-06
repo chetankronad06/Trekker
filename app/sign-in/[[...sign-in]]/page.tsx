@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
-import { Eye, EyeOff, Mountain, Mail, Lock, Loader2 } from "lucide-react"
+import { Eye, EyeOff, MapPin, Mail, Lock, Loader2, AlertTriangle } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
 export default function SignInPage() {
@@ -30,36 +30,17 @@ export default function SignInPage() {
   // Redirect if user is already signed in
   useEffect(() => {
     if (isSignedIn && user) {
-      router.push("/dashboard")
+      router.push("/profile")
     }
   }, [isSignedIn, user, router])
 
-  // Show loading while checking authentication status
   if (!isLoaded) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-4">
-        <div className="flex items-center gap-2">
-          <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
-          <span className="text-gray-600">Loading...</span>
-        </div>
-      </div>
-    )
+    return null // This will show loading.tsx
   }
 
-  // If user is signed in, show redirect message
+  // If user is signed in, don't render the form
   if (isSignedIn) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-4">
-        <Card className="w-full max-w-md shadow-2xl border-0">
-          <CardContent className="p-6 text-center">
-            <div className="mb-4">
-              <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto" />
-            </div>
-            <p className="text-gray-600">You're already signed in. Redirecting to dashboard...</p>
-          </CardContent>
-        </Card>
-      </div>
-    )
+    return null
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -68,6 +49,25 @@ export default function SignInPage() {
       [e.target.name]: e.target.value,
     }))
     setError("")
+  }
+
+  const checkUserExistsInDatabase = async (clerkId: string): Promise<boolean> => {
+    try {
+      const response = await fetch("/api/user/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clerkId }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        return data.exists
+      }
+      return false
+    } catch (error) {
+      console.error("Error checking user:", error)
+      return false
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -84,13 +84,37 @@ export default function SignInPage() {
         password: formData.password,
       })
 
-      if (result.status === "complete") {
+      if (result.status === "complete" && result.createdSessionId) {
         await setActive({ session: result.createdSessionId })
-        router.push("/dashboard")
+
+        // Check if user exists in our database
+        const userExists = await checkUserExistsInDatabase(result.createdSessionId)
+
+        if (!userExists) {
+          setError("🧳 Ready to start your journey? Please create your traveler account first!")
+          return
+        }
+
+        router.push("/profile")
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Sign in error:", err)
-      setError(err.errors?.[0]?.message || "Invalid email or password")
+
+      // Handle specific error cases with travel-friendly messages
+      if (err && typeof err === "object" && "errors" in err) {
+        const errors = err.errors as Array<{ code?: string; message?: string }>
+        const firstError = errors[0]
+
+        if (firstError?.code === "form_identifier_not_found") {
+          setError("🗺️ No traveler found with this email. Ready to join? Sign up to start your journey!")
+        } else if (firstError?.code === "form_password_incorrect") {
+          setError("🔐 Incorrect password. Double-check your travel credentials!")
+        } else {
+          setError(firstError?.message || "🚫 Unable to sign in. Please check your details and try again.")
+        }
+      } else {
+        setError("🚫 Something went wrong. Please try again.")
+      }
     } finally {
       setIsLoading(false)
     }
@@ -103,56 +127,32 @@ export default function SignInPage() {
       await signIn.authenticateWithRedirect({
         strategy: "oauth_google",
         redirectUrl: "/sso-callback",
-        redirectUrlComplete: "/dashboard",
+        redirectUrlComplete: "/sso-callback",
       })
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Google sign in error:", err)
-      setError(err.errors?.[0]?.message || "Google sign in failed")
+      setError("🌐 Google sign-in failed. Please try again or use email.")
     }
   }
 
   return (
-    <div
-      className="min-h-screen flex items-center justify-center p-4"
-      style={{
-        background: "linear-gradient(135deg, #f8fafc 0%, #e0f2fe 50%, #e0e7ff 100%)",
-      }}
-    >
-      <Card
-        className="w-full max-w-md shadow-2xl border-0"
-        style={{
-          backgroundColor: "rgba(255, 255, 255, 0.8)",
-          backdropFilter: "blur(10px)",
-        }}
-      >
-        <CardHeader className="text-center space-y-4">
-          <div
-            className="mx-auto w-12 h-12 rounded-full flex items-center justify-center"
-            style={{
-              background: "linear-gradient(135deg, #2563eb, #4f46e5)",
-            }}
-          >
-            <Mountain className="w-6 h-6 text-white" />
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-gray-900 via-gray-800 to-black">
+      <Card className="w-full max-w-md shadow-2xl border-0 bg-gray-800/90 backdrop-blur-sm">
+        <CardHeader className="text-center space-y-4 pb-6">
+          <div className="mx-auto w-12 h-12 bg-gradient-to-r from-green-500 to-green-600 rounded-full flex items-center justify-center">
+            <MapPin className="w-6 h-6 text-white" />
           </div>
-          <CardTitle
-            className="text-2xl font-bold"
-            style={{
-              background: "linear-gradient(135deg, #2563eb, #4f46e5)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              backgroundClip: "text",
-            }}
-          >
-            Welcome Back
+          <CardTitle className="text-2xl font-bold bg-gradient-to-r from-green-400 to-green-500 bg-clip-text text-transparent">
+            Welcome Back, Traveler
           </CardTitle>
-          <CardDescription>Sign in to your Trekker account</CardDescription>
+          <CardDescription className="text-gray-300">Continue your journey with Trekker</CardDescription>
         </CardHeader>
 
         <CardContent className="space-y-6">
           <Button
             onClick={handleGoogleSignIn}
             variant="outline"
-            className="w-full border-gray-300 hover:bg-gray-50 bg-transparent"
+            className="w-full border-gray-600 hover:bg-gray-700 bg-gray-700/50 text-white hover:text-white"
             disabled={isLoading}
           >
             <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
@@ -178,39 +178,44 @@ export default function SignInPage() {
 
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
-              <Separator className="w-full" />
+              <Separator className="w-full bg-gray-600" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-white px-2 text-gray-500">Or continue with email</span>
+              <span className="bg-gray-800 px-2 text-gray-400">Or continue with email</span>
             </div>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <Alert className="border-red-200 bg-red-50">
-                <AlertDescription className="text-red-700">{error}</AlertDescription>
+              <Alert className="border-red-500/50 bg-red-500/10">
+                <AlertTriangle className="h-4 w-4 text-red-400" />
+                <AlertDescription className="text-red-300">{error}</AlertDescription>
               </Alert>
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email" className="text-gray-300">
+                Email
+              </Label>
               <div className="relative">
                 <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                 <Input
                   id="email"
                   name="email"
                   type="email"
-                  placeholder="john@example.com"
+                  placeholder="your@email.com"
                   value={formData.email}
                   onChange={handleInputChange}
-                  className="pl-10"
+                  className="pl-10 bg-gray-700/50 border-gray-600 text-white placeholder:text-gray-400 focus:border-green-500 focus:ring-green-500"
                   required
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password" className="text-gray-300">
+                Password
+              </Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                 <Input
@@ -220,13 +225,13 @@ export default function SignInPage() {
                   placeholder="Enter your password"
                   value={formData.password}
                   onChange={handleInputChange}
-                  className="pl-10 pr-10"
+                  className="pl-10 pr-10 bg-gray-700/50 border-gray-600 text-white placeholder:text-gray-400 focus:border-green-500 focus:ring-green-500"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-3 text-gray-400 hover:text-gray-300"
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -235,10 +240,7 @@ export default function SignInPage() {
 
             <Button
               type="submit"
-              className="w-full text-white"
-              style={{
-                background: "linear-gradient(135deg, #2563eb, #4f46e5)",
-              }}
+              className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white"
               disabled={isLoading}
             >
               {isLoading ? (
@@ -247,18 +249,18 @@ export default function SignInPage() {
                   Signing In...
                 </>
               ) : (
-                "Sign In"
+                "Start Journey"
               )}
             </Button>
 
             {/* CAPTCHA container for Clerk */}
-            <div id="clerk-captcha" className="mt-4"></div>
+            <div id="clerk-captcha"></div>
           </form>
 
-          <div className="text-center text-sm text-gray-600">
-            Don't have an account?{" "}
-            <Link href="/sign-up" className="font-medium text-blue-600 hover:text-blue-500">
-              Sign up
+          <div className="text-center text-sm text-gray-400">
+            {"New traveler? "}
+            <Link href="/sign-up" className="font-medium text-green-400 hover:text-green-300">
+              Create your account
             </Link>
           </div>
         </CardContent>
