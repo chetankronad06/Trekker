@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && prisma db push && next build",
+    "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
     "postinstall": "prisma generate",
@@ -14,17 +14,19 @@
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset",
     "db:seed": "prisma db seed",
-    "db:test": "node -e \"console.log('Testing DB...'); require('./lib/prisma').testDatabaseConnection().then(r => console.log(r))\""
+    "db:clean": "rimraf node_modules/.prisma && npm run db:generate",
+    "db:force-generate": "npx prisma generate --force-reset",
+    "vercel-build": "prisma generate && prisma db push && next build"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.23.3",
-    "@prisma/client": "^6.1.0",
+    "@prisma/client": "^6.11.1",
     "@radix-ui/react-alert-dialog": "^1.1.2",
     "@radix-ui/react-dialog": "^1.1.2",
     "@radix-ui/react-dropdown-menu": "^2.1.2",
-    "@radix-ui/react-label": "^2.1.0",
-    "@radix-ui/react-separator": "^1.1.0",
-    "@radix-ui/react-slot": "^1.1.0",
+    "@radix-ui/react-label": "^2.1.7",
+    "@radix-ui/react-separator": "^1.1.7",
+    "@radix-ui/react-slot": "^1.2.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.468.0",
