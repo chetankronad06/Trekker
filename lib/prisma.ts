@@ -18,22 +18,21 @@ export const prisma =
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma
 
-// Enhanced database connection test with better error handling
+// Simplified database connection test - only use for debugging
 export async function testDatabaseConnection() {
   try {
     console.log("🔍 Testing database connection...")
 
-    // Test connection
+    // Just try to connect - don't run raw queries
     await prisma.$connect()
 
-    // Test a simple query
-    await prisma.$queryRaw`SELECT 1`
+    // Test with a simple operation instead of raw SQL
+    const userCount = await prisma.user.count()
+    console.log("✅ Database connected successfully, users:", userCount)
 
-    console.log("✅ Database connected successfully")
     return { success: true, error: null }
   } catch (error) {
     console.error("❌ Database connection failed:", error)
-
     let errorMessage = "Unknown database error"
     let suggestion = "Check your DATABASE_URL configuration"
 
@@ -53,12 +52,9 @@ export async function testDatabaseConnection() {
     }
 
     return { success: false, error: errorMessage, suggestion }
-  } finally {
-    await prisma.$disconnect()
   }
+  // Don't disconnect here - let Prisma manage its own connections
 }
 
-// Graceful shutdown
-process.on("beforeExit", async () => {
-  await prisma.$disconnect()
-})
+// Remove the problematic beforeExit handler
+// Let Prisma handle its own connection lifecycle

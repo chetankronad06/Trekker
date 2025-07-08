@@ -18,7 +18,113 @@ model User {
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
 
+  // Relations for trip management
+  handledTrips     Trip[]        @relation("TripHandler")
+  tripMemberships  TripMember[]
+  tripMessages     TripMessage[]
+  
+  // Relations for trip requests
+  sentRequests     TripRequest[] @relation("RequestSender")
+  receivedRequests TripRequest[] @relation("RequestReceiver")
+
   @@map("users")
   @@index([clerkId])
   @@index([email])
+}
+
+model Trip {
+  id            String     @id @default(cuid())
+  name          String
+  description   String?
+  startDate     DateTime?  @map("start_date")
+  endDate       DateTime?  @map("end_date")
+  startingPoint String?    @map("starting_point")
+  status        TripStatus @default(PLANNED)
+  handlerClerkId String    @map("handler_clerk_id")
+  inviteCode    String     @unique @map("invite_code")
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
+
+  // Relations
+  handler  User          @relation("TripHandler", fields: [handlerClerkId], references: [clerkId])
+  members  TripMember[]
+  messages TripMessage[]
+  requests TripRequest[]
+
+  @@map("trips")
+  @@index([handlerClerkId])
+  @@index([inviteCode])
+}
+
+model TripMember {
+  id          String   @id @default(cuid())
+  tripId      String   @map("trip_id")
+  userClerkId String   @map("user_clerk_id")
+  role        UserRole @default(MEMBER)
+  joinedAt    DateTime @default(now()) @map("joined_at")
+
+  // Relations
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userClerkId], references: [clerkId])
+
+  @@unique([tripId, userClerkId])
+  @@map("trip_members")
+  @@index([tripId])
+  @@index([userClerkId])
+}
+
+model TripMessage {
+  id          String   @id @default(cuid())
+  tripId      String   @map("trip_id")
+  userClerkId String   @map("user_clerk_id")
+  message     String
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userClerkId], references: [clerkId])
+
+  @@map("trip_messages")
+  @@index([tripId])
+  @@index([createdAt])
+}
+
+model TripRequest {
+  id              String        @id @default(cuid())
+  tripId          String        @map("trip_id")
+  requesterClerkId String       @map("requester_clerk_id")
+  receiverClerkId String        @map("receiver_clerk_id") // Trip handler
+  status          RequestStatus @default(PENDING)
+  message         String?       // Optional message from requester
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  trip      Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  requester User @relation("RequestSender", fields: [requesterClerkId], references: [clerkId])
+  receiver  User @relation("RequestReceiver", fields: [receiverClerkId], references: [clerkId])
+
+  @@unique([tripId, requesterClerkId]) // Prevent duplicate requests
+  @@map("trip_requests")
+  @@index([tripId])
+  @@index([requesterClerkId])
+  @@index([receiverClerkId])
+  @@index([status])
+}
+
+enum TripStatus {
+  PLANNED
+  ACTIVE
+  COMPLETED
+}
+
+enum UserRole {
+  HANDLER
+  MEMBER
+}
+
+enum RequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
 }
