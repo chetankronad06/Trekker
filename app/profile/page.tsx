@@ -25,6 +25,9 @@ import {
   Save,
   X,
   AlertTriangle,
+  Bell,
+  BellOff,
+  Check,
 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { CustomUserButton } from "@/components/custom-user-button"
@@ -67,6 +70,16 @@ interface TripRequest {
   }
 }
 
+interface Notification {
+  id: string
+  type: string
+  title: string
+  message: string
+  data: any
+  read: boolean
+  createdAt: string
+}
+
 export default function ProfilePage() {
   const { user: clerkUser, isLoaded, isSignedIn } = useUser()
   const router = useRouter()
@@ -87,6 +100,11 @@ export default function ProfilePage() {
   const [receivedRequests, setReceivedRequests] = useState<TripRequest[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [processingRequests, setProcessingRequests] = useState<Set<string>>(new Set())
+
+  // Notifications state
+  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [loadingNotifications, setLoadingNotifications] = useState(false)
 
   // Common state
   const [error, setError] = useState("")
@@ -191,12 +209,31 @@ export default function ProfilePage() {
     }
   }, [clerkUser, toast])
 
+  const fetchNotifications = useCallback(async () => {
+    if (!clerkUser) return
+
+    setLoadingNotifications(true)
+    try {
+      const response = await fetch("/api/notifications")
+      if (response.ok) {
+        const data = await response.json()
+        setNotifications(data.notifications || [])
+        setUnreadCount(data.notifications?.filter((n: Notification) => !n.read).length || 0)
+      }
+    } catch (error) {
+      console.error("Error fetching notifications:", error)
+    } finally {
+      setLoadingNotifications(false)
+    }
+  }, [clerkUser])
+
   useEffect(() => {
     if (isLoaded && clerkUser) {
       syncUserToDatabase()
       fetchRequests()
+      fetchNotifications()
     }
-  }, [isLoaded, clerkUser, syncUserToDatabase, fetchRequests])
+  }, [isLoaded, clerkUser, syncUserToDatabase, fetchRequests, fetchNotifications])
 
   // Profile editing functions
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -209,15 +246,12 @@ export default function ProfilePage() {
 
   const handleSave = async () => {
     if (!editForm.firstName || !editForm.lastName || !editForm.email) {
-      setError("🧳 All fields are required for your travel profile")
+      setError("🚫 All fields are required")
       return
     }
 
     setIsSaving(true)
-    setError("")
-
     try {
-      // Update in database
       const response = await fetch("/api/user", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -229,40 +263,16 @@ export default function ProfilePage() {
         setDbUser(data.user)
         setIsEditing(false)
         toast({
-          title: "✅ Profile Updated!",
+          title: "✅ Profile Updated",
           description: "Your travel profile has been updated successfully.",
         })
-
-        // Update Clerk user
-        try {
-          await clerkUser?.update({
-            firstName: editForm.firstName,
-            lastName: editForm.lastName,
-          })
-          // Update primary email if changed
-          if (editForm.email !== clerkUser?.emailAddresses[0]?.emailAddress) {
-            await clerkUser?.createEmailAddress({ email: editForm.email })
-          }
-        } catch (clerkError) {
-          console.error("Error updating Clerk user:", clerkError)
-          // Don't show error to user as database update succeeded
-        }
       } else {
-        setError("🚫 Failed to update your travel profile")
-        toast({
-          title: "❌ Update Failed",
-          description: "Failed to update your travel profile",
-          variant: "destructive",
-        })
+        const errorData = await response.json()
+        setError(errorData.details || "🚫 Failed to update profile")
       }
     } catch (err) {
-      console.error("Error updating user:", err)
-      setError("🚫 Failed to update your travel profile")
-      toast({
-        title: "❌ Network Error",
-        description: "Please check your connection and try again.",
-        variant: "destructive",
-      })
+      console.error("Error updating profile:", err)
+      setError("🚫 Failed to update profile")
     } finally {
       setIsSaving(false)
     }
@@ -280,45 +290,37 @@ export default function ProfilePage() {
     setError("")
   }
 
-  // Trip request functions
+  // Request handling functions
   const handleRequestAction = async (requestId: string, action: "accept" | "reject") => {
     setProcessingRequests((prev) => new Set(prev).add(requestId))
 
     try {
       const response = await fetch(`/api/trip-requests/${requestId}`, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action }),
       })
 
-      const data = await response.json()
-
       if (response.ok) {
         toast({
-          title: action === "accept" ? "✅ Request Accepted!" : "❌ Request Rejected",
-          description: `Trip request has been ${action}ed successfully.`,
+          title: action === "accept" ? "✅ Request Accepted" : "❌ Request Rejected",
+          description: `Join request has been ${action}ed successfully.`,
         })
 
-        // Update the request in the list
-        setReceivedRequests((prev) =>
-          prev.map((req) =>
-            req.id === requestId ? { ...req, status: action === "accept" ? "ACCEPTED" : "REJECTED" } : req,
-          ),
-        )
+        // Refresh requests
+        await fetchRequests()
       } else {
+        const errorData = await response.json()
         toast({
-          title: "❌ Error",
-          description: data.details || data.error || `Failed to ${action} request`,
+          title: "❌ Action Failed",
+          description: errorData.details || `Failed to ${action} request`,
           variant: "destructive",
         })
       }
     } catch (error) {
-      console.error(`Error ${action}ing request:`, error)
       toast({
-        title: "❌ Network Error",
-        description: "Please check your connection and try again.",
+        title: "❌ Error",
+        description: `Failed to ${action} request`,
         variant: "destructive",
       })
     } finally {
@@ -330,7 +332,9 @@ export default function ProfilePage() {
     }
   }
 
-  const cancelRequest = async (requestId: string) => {
+  const handleDeleteRequest = async (requestId: string) => {
+    if (!confirm("Are you sure you want to delete this request?")) return
+
     setProcessingRequests((prev) => new Set(prev).add(requestId))
 
     try {
@@ -340,25 +344,24 @@ export default function ProfilePage() {
 
       if (response.ok) {
         toast({
-          title: "🗑️ Request Cancelled",
-          description: "Your trip request has been cancelled.",
+          title: "🗑️ Request Deleted",
+          description: "Your join request has been deleted.",
         })
 
-        // Remove the request from the list
-        setSentRequests((prev) => prev.filter((req) => req.id !== requestId))
+        // Refresh requests
+        await fetchRequests()
       } else {
-        const data = await response.json()
+        const errorData = await response.json()
         toast({
-          title: "❌ Error",
-          description: data.details || data.error || "Failed to cancel request",
+          title: "❌ Delete Failed",
+          description: errorData.details || "Failed to delete request",
           variant: "destructive",
         })
       }
     } catch (error) {
-      console.error("Error cancelling request:", error)
       toast({
-        title: "❌ Network Error",
-        description: "Please check your connection and try again.",
+        title: "❌ Error",
+        description: "Failed to delete request",
         variant: "destructive",
       })
     } finally {
@@ -370,11 +373,88 @@ export default function ProfilePage() {
     }
   }
 
-  if (!isLoaded || isLoading) {
-    return null
+  // Notification functions
+  const markNotificationAsRead = async (notificationId: string) => {
+    try {
+      await fetch("/api/notifications", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notificationId }),
+      })
+
+      setNotifications((prev) => prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n)))
+      setUnreadCount((prev) => Math.max(0, prev - 1))
+    } catch (error) {
+      console.error("Error marking notification as read:", error)
+    }
   }
 
-  if (!isSignedIn) {
+  const markAllNotificationsAsRead = async () => {
+    try {
+      await fetch("/api/notifications", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ markAllAsRead: true }),
+      })
+
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
+      setUnreadCount(0)
+      toast({
+        title: "✅ All Notifications Read",
+        description: "All notifications have been marked as read.",
+      })
+    } catch (error) {
+      console.error("Error marking all notifications as read:", error)
+    }
+  }
+
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case "MEMBER_REMOVED":
+        return <XCircle className="w-5 h-5 text-red-400" />
+      case "MEMBER_JOINED":
+        return <CheckCircle className="w-5 h-5 text-green-400" />
+      case "REQUEST_ACCEPTED":
+        return <CheckCircle className="w-5 h-5 text-green-400" />
+      case "REQUEST_REJECTED":
+        return <XCircle className="w-5 h-5 text-red-400" />
+      case "TRIP_DELETED":
+        return <Trash2 className="w-5 h-5 text-red-400" />
+      default:
+        return <Bell className="w-5 h-5 text-blue-400" />
+    }
+  }
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60)
+
+    if (diffInHours < 1) {
+      return "Just now"
+    } else if (diffInHours < 24) {
+      return `${Math.floor(diffInHours)} hour${Math.floor(diffInHours) !== 1 ? "s" : ""} ago`
+    } else if (diffInHours < 168) {
+      return `${Math.floor(diffInHours / 24)} day${Math.floor(diffInHours / 24) !== 1 ? "s" : ""} ago`
+    } else {
+      return date.toLocaleDateString()
+    }
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "PENDING":
+        return "bg-yellow-500/20 text-yellow-400 border-yellow-500/50"
+      case "ACCEPTED":
+        return "bg-green-500/20 text-green-400 border-green-500/50"
+      case "REJECTED":
+        return "bg-red-500/20 text-red-400 border-red-500/50"
+      default:
+        return "bg-gray-600/20 text-gray-400 border-gray-600/50"
+    }
+  }
+
+  if (!isLoaded || !isSignedIn) {
     return null
   }
 
@@ -384,189 +464,207 @@ export default function ProfilePage() {
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-r from-green-500 to-green-600 rounded-full flex items-center justify-center">
+            <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center">
               <User className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-green-400 to-green-500 bg-clip-text text-transparent">
+              <h1 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-blue-400 to-blue-500 bg-clip-text text-transparent">
                 Travel Profile
               </h1>
-              <p className="text-gray-400 text-sm">Manage your account and trip requests</p>
+              <p className="text-gray-400 text-sm">Manage your travel profile and requests</p>
             </div>
           </div>
           <CustomUserButton />
         </div>
 
-        <Tabs defaultValue="profile" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 bg-gray-800/50 border-gray-700">
+        {/* Error Alert */}
+        {error && (
+          <Alert className="border-red-500/50 bg-red-500/10 mb-6">
+            <AlertTriangle className="h-4 w-4 text-red-400" />
+            <AlertDescription className="text-red-300">{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {/* Profile Tabs */}
+        <Tabs defaultValue="profile" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-4 bg-gray-800/50 border-gray-700">
             <TabsTrigger
               value="profile"
-              className="data-[state=active]:bg-green-500/20 data-[state=active]:text-green-400 text-gray-400"
+              className="data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-400"
             >
               <User className="w-4 h-4 mr-2" />
               Profile
             </TabsTrigger>
             <TabsTrigger
               value="sent-requests"
-              className="data-[state=active]:bg-green-500/20 data-[state=active]:text-green-400 text-gray-400"
+              className="data-[state=active]:bg-green-500/20 data-[state=active]:text-green-400"
             >
-              <Clock className="w-4 h-4 mr-2" />
               Sent ({sentRequests.length})
             </TabsTrigger>
             <TabsTrigger
               value="received-requests"
-              className="data-[state=active]:bg-green-500/20 data-[state=active]:text-green-400 text-gray-400"
+              className="data-[state=active]:bg-purple-500/20 data-[state=active]:text-purple-400"
             >
-              <Users className="w-4 h-4 mr-2" />
-              Received ({receivedRequests.filter((r) => r.status === "PENDING").length})
+              Received ({receivedRequests.length})
+            </TabsTrigger>
+            <TabsTrigger
+              value="notifications"
+              className="data-[state=active]:bg-orange-500/20 data-[state=active]:text-orange-400 relative"
+            >
+              <Bell className="w-4 h-4 mr-2" />
+              Notifications
+              {unreadCount > 0 && (
+                <Badge className="absolute -top-1 -right-1 bg-red-500 text-white text-xs min-w-[1.25rem] h-5 flex items-center justify-center p-0">
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </Badge>
+              )}
             </TabsTrigger>
           </TabsList>
 
           {/* Profile Tab */}
-          <TabsContent value="profile" className="mt-6">
+          <TabsContent value="profile">
             <Card className="bg-gray-800/90 backdrop-blur-sm border-gray-700 shadow-2xl">
               <CardHeader>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="flex items-center gap-2 text-white">
-                      <User className="h-5 w-5 text-green-400" />
-                      Personal Information
-                    </CardTitle>
-                    <CardDescription className="text-gray-400">Your traveler details and preferences</CardDescription>
+                    <CardTitle className="text-white">Personal Information</CardTitle>
+                    <CardDescription className="text-gray-400">Manage your travel profile information</CardDescription>
                   </div>
                   {!isEditing && (
                     <Button
                       onClick={() => setIsEditing(true)}
                       variant="outline"
                       size="sm"
-                      className="border-green-500/50 text-green-400 hover:bg-green-500/10 w-full sm:w-auto"
+                      className="border-blue-500/50 text-blue-400 hover:bg-blue-500/10 bg-transparent"
                     >
-                      <Edit3 className="h-4 w-4 mr-2" />
+                      <Edit3 className="w-4 h-4 mr-2" />
                       Edit Profile
                     </Button>
                   )}
                 </div>
               </CardHeader>
               <CardContent className="space-y-6">
-                {error && (
-                  <Alert className="border-red-500/50 bg-red-500/10">
-                    <AlertTriangle className="h-4 w-4 text-red-400" />
-                    <AlertDescription className="text-red-300">{error}</AlertDescription>
-                  </Alert>
-                )}
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="firstName" className="text-gray-300">
-                      First Name
-                    </Label>
-                    {isEditing ? (
-                      <Input
-                        id="firstName"
-                        name="firstName"
-                        value={editForm.firstName}
-                        onChange={handleInputChange}
-                        placeholder="Enter first name"
-                        className="bg-gray-700/50 border-gray-600 text-white placeholder:text-gray-400 focus:border-green-500 focus:ring-green-500"
-                      />
-                    ) : (
-                      <div className="p-3 bg-gray-700/30 rounded-md border border-gray-600 text-white">
-                        {dbUser?.firstName || "Not set"}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="lastName" className="text-gray-300">
-                      Last Name
-                    </Label>
-                    {isEditing ? (
-                      <Input
-                        id="lastName"
-                        name="lastName"
-                        value={editForm.lastName}
-                        onChange={handleInputChange}
-                        placeholder="Enter last name"
-                        className="bg-gray-700/50 border-gray-600 text-white placeholder:text-gray-400 focus:border-green-500 focus:ring-green-500"
-                      />
-                    ) : (
-                      <div className="p-3 bg-gray-700/30 rounded-md border border-gray-600 text-white">
-                        {dbUser?.lastName || "Not set"}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor="email" className="text-gray-300">
-                      Email Address
-                    </Label>
-                    {isEditing ? (
+                {dbUser ? (
+                  <>
+                    {/* Profile Picture */}
+                    <div className="flex items-center space-x-4">
                       <div className="relative">
-                        <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                        <Input
-                          id="email"
-                          name="email"
-                          type="email"
-                          value={editForm.email}
-                          onChange={handleInputChange}
-                          placeholder="Enter email address"
-                          className="pl-10 bg-gray-700/50 border-gray-600 text-white placeholder:text-gray-400 focus:border-green-500 focus:ring-green-500"
-                        />
+                        {clerkUser?.imageUrl ? (
+                          <img
+                            src={clerkUser.imageUrl || "/placeholder.svg"}
+                            alt="Profile"
+                            className="w-20 h-20 rounded-full object-cover border-2 border-gray-600"
+                          />
+                        ) : (
+                          <div className="w-20 h-20 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center">
+                            <User className="w-8 h-8 text-white" />
+                          </div>
+                        )}
                       </div>
-                    ) : (
-                      <div className="p-3 bg-gray-700/30 rounded-md border border-gray-600 flex items-center gap-2 text-white">
-                        <Mail className="h-4 w-4 text-gray-400" />
-                        {dbUser?.email || "Not set"}
+                      <div>
+                        <h3 className="text-lg font-semibold text-white">
+                          {dbUser.firstName} {dbUser.lastName}
+                        </h3>
+                        <p className="text-gray-400">{dbUser.email}</p>
+                        <p className="text-sm text-gray-500">
+                          Member since {new Date(dbUser.createdAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Editable Fields */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="firstName" className="text-gray-300">
+                          First Name
+                        </Label>
+                        {isEditing ? (
+                          <Input
+                            id="firstName"
+                            name="firstName"
+                            value={editForm.firstName}
+                            onChange={handleInputChange}
+                            className="bg-gray-700/50 border-gray-600 text-white focus:border-blue-500"
+                          />
+                        ) : (
+                          <div className="p-3 bg-gray-700/30 rounded-md text-white">{dbUser.firstName}</div>
+                        )}
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="lastName" className="text-gray-300">
+                          Last Name
+                        </Label>
+                        {isEditing ? (
+                          <Input
+                            id="lastName"
+                            name="lastName"
+                            value={editForm.lastName}
+                            onChange={handleInputChange}
+                            className="bg-gray-700/50 border-gray-600 text-white focus:border-blue-500"
+                          />
+                        ) : (
+                          <div className="p-3 bg-gray-700/30 rounded-md text-white">{dbUser.lastName}</div>
+                        )}
+                      </div>
+
+                      <div className="space-y-2 md:col-span-2">
+                        <Label htmlFor="email" className="text-gray-300">
+                          Email Address
+                        </Label>
+                        {isEditing ? (
+                          <Input
+                            id="email"
+                            name="email"
+                            type="email"
+                            value={editForm.email}
+                            onChange={handleInputChange}
+                            className="bg-gray-700/50 border-gray-600 text-white focus:border-blue-500"
+                          />
+                        ) : (
+                          <div className="p-3 bg-gray-700/30 rounded-md text-white flex items-center">
+                            <Mail className="w-4 h-4 mr-2 text-gray-400" />
+                            {dbUser.email}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    {isEditing && (
+                      <div className="flex gap-3 pt-4">
+                        <Button
+                          onClick={handleSave}
+                          disabled={isSaving}
+                          className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white"
+                        >
+                          {isSaving ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Saving...
+                            </>
+                          ) : (
+                            <>
+                              <Save className="w-4 h-4 mr-2" />
+                              Save Changes
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          onClick={handleCancel}
+                          variant="outline"
+                          className="border-gray-600 text-gray-300 hover:bg-gray-700 bg-transparent"
+                        >
+                          <X className="w-4 h-4 mr-2" />
+                          Cancel
+                        </Button>
                       </div>
                     )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-gray-300">Member Since</Label>
-                    <div className="p-3 bg-gray-700/30 rounded-md border border-gray-600 flex items-center gap-2 text-white">
-                      <Calendar className="h-4 w-4 text-gray-400" />
-                      {clerkUser?.createdAt ? new Date(clerkUser.createdAt).toLocaleDateString() : "Unknown"}
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-gray-300">Account Status</Label>
-                    <div className="p-3 bg-gray-700/30 rounded-md border border-gray-600 flex items-center gap-2 text-white">
-                      <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                      Active Traveler
-                    </div>
-                  </div>
-                </div>
-
-                {/* Action Buttons */}
-                {isEditing && (
-                  <div className="flex flex-col sm:flex-row gap-3 pt-4">
-                    <Button
-                      onClick={handleSave}
-                      disabled={isSaving}
-                      className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white"
-                    >
-                      {isSaving ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Saving...
-                        </>
-                      ) : (
-                        <>
-                          <Save className="h-4 w-4 mr-2" />
-                          Save Changes
-                        </>
-                      )}
-                    </Button>
-                    <Button
-                      onClick={handleCancel}
-                      variant="outline"
-                      disabled={isSaving}
-                      className="border-gray-600 text-gray-300 hover:bg-gray-700 bg-transparent"
-                    >
-                      <X className="h-4 w-4 mr-2" />
-                      Cancel
-                    </Button>
+                  </>
+                ) : (
+                  <div className="text-center py-8">
+                    <Loader2 className="w-8 h-8 text-blue-500 animate-spin mx-auto mb-2" />
+                    <p className="text-gray-400">Loading profile...</p>
                   </div>
                 )}
               </CardContent>
@@ -574,60 +672,76 @@ export default function ProfilePage() {
           </TabsContent>
 
           {/* Sent Requests Tab */}
-          <TabsContent value="sent-requests" className="mt-6">
+          <TabsContent value="sent-requests">
             <Card className="bg-gray-800/90 backdrop-blur-sm border-gray-700 shadow-2xl">
               <CardHeader>
-                <CardTitle className="text-white">Sent Trip Requests</CardTitle>
-                <CardDescription className="text-gray-400">Trip requests you've sent to trip handlers</CardDescription>
+                <CardTitle className="text-white">Sent Join Requests</CardTitle>
+                <CardDescription className="text-gray-400">Track your requests to join trips</CardDescription>
               </CardHeader>
               <CardContent>
-                {sentRequests.length === 0 ? (
+                {isLoading ? (
                   <div className="text-center py-8">
-                    <Clock className="w-12 h-12 mx-auto mb-4 text-gray-600" />
-                    <p className="text-gray-400">No sent requests yet</p>
-                    <p className="text-gray-500 text-sm">Join trips using invite codes to see requests here</p>
+                    <Loader2 className="w-8 h-8 text-green-500 animate-spin mx-auto mb-2" />
+                    <p className="text-gray-400">Loading requests...</p>
+                  </div>
+                ) : sentRequests.length === 0 ? (
+                  <div className="text-center py-12">
+                    <div className="w-16 h-16 bg-gray-700/50 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <MapPin className="w-8 h-8 text-gray-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-white mb-2">No requests sent</h3>
+                    <p className="text-gray-400">Browse available trips and send join requests</p>
                   </div>
                 ) : (
                   <div className="space-y-4">
                     {sentRequests.map((request) => (
-                      <div key={request.id} className="p-4 rounded-lg border border-gray-700 bg-gray-700/30">
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <h3 className="font-medium text-white">{request.trip.name}</h3>
-                            <p className="text-sm text-gray-400">{request.trip.description}</p>
-                            {request.trip.startingPoint && (
-                              <div className="flex items-center gap-1 mt-1">
-                                <MapPin className="w-3 h-3 text-green-400" />
-                                <span className="text-xs text-gray-500">{request.trip.startingPoint}</span>
+                      <Card key={request.id} className="bg-gray-700/50 border-gray-600">
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <h3 className="font-semibold text-white">{request.trip.name}</h3>
+                                <Badge className={getStatusColor(request.status)}>
+                                  {request.status === "PENDING" && <Clock className="w-3 h-3 mr-1" />}
+                                  {request.status === "ACCEPTED" && <CheckCircle className="w-3 h-3 mr-1" />}
+                                  {request.status === "REJECTED" && <XCircle className="w-3 h-3 mr-1" />}
+                                  {request.status.toLowerCase()}
+                                </Badge>
                               </div>
-                            )}
-                            {request.message && (
-                              <p className="text-xs text-gray-500 mt-1 italic">"{request.message}"</p>
-                            )}
-                            <p className="text-xs text-gray-500 mt-1">
-                              Sent {new Date(request.createdAt).toLocaleDateString()}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Badge
-                              variant={request.status === "ACCEPTED" ? "default" : "secondary"}
-                              className={
-                                request.status === "ACCEPTED"
-                                  ? "bg-green-500/20 text-green-400 border-green-500/50"
-                                  : request.status === "REJECTED"
-                                    ? "bg-red-500/20 text-red-400 border-red-500/50"
-                                    : "bg-yellow-500/20 text-yellow-400 border-yellow-500/50"
-                              }
-                            >
-                              {request.status.toLowerCase()}
-                            </Badge>
+
+                              {request.trip.startingPoint && (
+                                <div className="flex items-center text-gray-300 text-sm mb-2">
+                                  <MapPin className="w-3 h-3 mr-1 text-green-400" />
+                                  {request.trip.startingPoint}
+                                </div>
+                              )}
+
+                              {request.trip.startDate && request.trip.endDate && (
+                                <div className="flex items-center text-gray-300 text-sm mb-2">
+                                  <Calendar className="w-3 h-3 mr-1 text-blue-400" />
+                                  {new Date(request.trip.startDate).toLocaleDateString()} -{" "}
+                                  {new Date(request.trip.endDate).toLocaleDateString()}
+                                </div>
+                              )}
+
+                              {request.message && (
+                                <div className="text-sm text-gray-300 bg-gray-600/30 p-2 rounded mb-2">
+                                  "{request.message}"
+                                </div>
+                              )}
+
+                              <div className="text-xs text-gray-500">
+                                Sent on {new Date(request.createdAt).toLocaleDateString()}
+                              </div>
+                            </div>
+
                             {request.status === "PENDING" && (
                               <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => cancelRequest(request.id)}
+                                onClick={() => handleDeleteRequest(request.id)}
                                 disabled={processingRequests.has(request.id)}
-                                className="border-red-500/50 text-red-400 hover:bg-red-500/10 bg-transparent"
+                                size="sm"
+                                variant="ghost"
+                                className="text-red-400 hover:text-red-300 hover:bg-red-500/10 ml-4"
                               >
                                 {processingRequests.has(request.id) ? (
                                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -637,8 +751,8 @@ export default function ProfilePage() {
                               </Button>
                             )}
                           </div>
-                        </div>
-                      </div>
+                        </CardContent>
+                      </Card>
                     ))}
                   </div>
                 )}
@@ -647,92 +761,191 @@ export default function ProfilePage() {
           </TabsContent>
 
           {/* Received Requests Tab */}
-          <TabsContent value="received-requests" className="mt-6">
+          <TabsContent value="received-requests">
             <Card className="bg-gray-800/90 backdrop-blur-sm border-gray-700 shadow-2xl">
               <CardHeader>
-                <CardTitle className="text-white">Received Trip Requests</CardTitle>
-                <CardDescription className="text-gray-400">
-                  Trip requests from users wanting to join your trips
-                </CardDescription>
+                <CardTitle className="text-white">Received Join Requests</CardTitle>
+                <CardDescription className="text-gray-400">Manage requests to join your trips</CardDescription>
               </CardHeader>
               <CardContent>
-                {receivedRequests.length === 0 ? (
+                {isLoading ? (
                   <div className="text-center py-8">
-                    <Users className="w-12 h-12 mx-auto mb-4 text-gray-600" />
-                    <p className="text-gray-400">No received requests yet</p>
-                    <p className="text-gray-500 text-sm">Trip join requests will appear here</p>
+                    <Loader2 className="w-8 h-8 text-purple-500 animate-spin mx-auto mb-2" />
+                    <p className="text-gray-400">Loading requests...</p>
+                  </div>
+                ) : receivedRequests.length === 0 ? (
+                  <div className="text-center py-12">
+                    <div className="w-16 h-16 bg-gray-700/50 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Users className="w-8 h-8 text-gray-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-white mb-2">No join requests</h3>
+                    <p className="text-gray-400">When people request to join your trips, they'll appear here</p>
                   </div>
                 ) : (
                   <div className="space-y-4">
                     {receivedRequests.map((request) => (
-                      <div key={request.id} className="p-4 rounded-lg border border-gray-700 bg-gray-700/30">
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                              <h3 className="font-medium text-white">{request.trip.name}</h3>
-                              <span className="text-gray-400">•</span>
-                              <span className="text-sm text-green-400">
-                                {request.requester?.firstName} {request.requester?.lastName}
-                              </span>
+                      <Card key={request.id} className="bg-gray-700/50 border-gray-600">
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <h3 className="font-semibold text-white">{request.trip.name}</h3>
+                                <Badge className={getStatusColor(request.status)}>
+                                  {request.status === "PENDING" && <Clock className="w-3 h-3 mr-1" />}
+                                  {request.status === "ACCEPTED" && <CheckCircle className="w-3 h-3 mr-1" />}
+                                  {request.status === "REJECTED" && <XCircle className="w-3 h-3 mr-1" />}
+                                  {request.status.toLowerCase()}
+                                </Badge>
+                              </div>
+
+                              {request.requester && (
+                                <div className="flex items-center gap-3 mb-3">
+                                  {request.requester.profileImageUrl ? (
+                                    <img
+                                      src={request.requester.profileImageUrl || "/placeholder.svg"}
+                                      alt={`${request.requester.firstName} ${request.requester.lastName}`}
+                                      className="w-8 h-8 rounded-full object-cover"
+                                    />
+                                  ) : (
+                                    <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
+                                      {request.requester.firstName?.[0]?.toUpperCase() ||
+                                        request.requester.email[0].toUpperCase()}
+                                    </div>
+                                  )}
+                                  <div>
+                                    <p className="text-sm font-medium text-white">
+                                      {request.requester.firstName} {request.requester.lastName}
+                                    </p>
+                                    <p className="text-xs text-gray-400">{request.requester.email}</p>
+                                  </div>
+                                </div>
+                              )}
+
+                              {request.message && (
+                                <div className="text-sm text-gray-300 bg-gray-600/30 p-2 rounded mb-2">
+                                  "{request.message}"
+                                </div>
+                              )}
+
+                              <div className="text-xs text-gray-500">
+                                Received on {new Date(request.createdAt).toLocaleDateString()}
+                              </div>
                             </div>
-                            <p className="text-sm text-gray-400">{request.requester?.email}</p>
-                            {request.message && (
-                              <p className="text-sm text-gray-300 mt-2 p-2 bg-gray-600/30 rounded italic">
-                                "{request.message}"
-                              </p>
+
+                            {request.status === "PENDING" && (
+                              <div className="flex gap-2 ml-4">
+                                <Button
+                                  onClick={() => handleRequestAction(request.id, "accept")}
+                                  disabled={processingRequests.has(request.id)}
+                                  size="sm"
+                                  className="bg-green-500/20 text-green-400 border border-green-500/50 hover:bg-green-500/30"
+                                >
+                                  {processingRequests.has(request.id) ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <CheckCircle className="w-3 h-3" />
+                                  )}
+                                </Button>
+                                <Button
+                                  onClick={() => handleRequestAction(request.id, "reject")}
+                                  disabled={processingRequests.has(request.id)}
+                                  size="sm"
+                                  variant="outline"
+                                  className="bg-red-500/20 text-red-400 border border-red-500/50 hover:bg-red-500/30"
+                                >
+                                  {processingRequests.has(request.id) ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <XCircle className="w-3 h-3" />
+                                  )}
+                                </Button>
+                              </div>
                             )}
-                            <p className="text-xs text-gray-500 mt-2">
-                              Requested {new Date(request.createdAt).toLocaleDateString()}
-                            </p>
                           </div>
-                          {request.status === "PENDING" ? (
-                            <div className="flex gap-2">
-                              <Button
-                                size="sm"
-                                onClick={() => handleRequestAction(request.id, "accept")}
-                                disabled={processingRequests.has(request.id)}
-                                className="bg-green-500/20 text-green-400 border border-green-500/50 hover:bg-green-500/30"
-                              >
-                                {processingRequests.has(request.id) ? (
-                                  <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                  <>
-                                    <CheckCircle className="w-4 h-4 mr-1" />
-                                    Accept
-                                  </>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Notifications Tab */}
+          <TabsContent value="notifications">
+            <Card className="bg-gray-800/90 backdrop-blur-sm border-gray-700 shadow-2xl">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-white flex items-center gap-2">
+                      <Bell className="w-5 h-5 text-orange-400" />
+                      Notifications
+                      {unreadCount > 0 && <Badge className="bg-red-500 text-white">{unreadCount}</Badge>}
+                    </CardTitle>
+                    <CardDescription className="text-gray-400">Stay updated with your trip activities</CardDescription>
+                  </div>
+                  {unreadCount > 0 && (
+                    <Button
+                      onClick={markAllNotificationsAsRead}
+                      variant="outline"
+                      size="sm"
+                      className="border-orange-500/50 text-orange-400 hover:bg-orange-500/10 bg-transparent"
+                    >
+                      <Check className="w-4 h-4 mr-2" />
+                      Mark All Read
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {loadingNotifications ? (
+                  <div className="text-center py-8">
+                    <Loader2 className="w-8 h-8 text-orange-500 animate-spin mx-auto mb-2" />
+                    <p className="text-gray-400">Loading notifications...</p>
+                  </div>
+                ) : notifications.length === 0 ? (
+                  <div className="text-center py-12">
+                    <div className="w-16 h-16 bg-gray-700/50 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <BellOff className="w-8 h-8 text-gray-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-white mb-2">No notifications</h3>
+                    <p className="text-gray-400">You're all caught up! Notifications will appear here.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {notifications.map((notification) => (
+                      <Card
+                        key={notification.id}
+                        className={`border transition-all duration-200 cursor-pointer ${
+                          notification.read
+                            ? "bg-gray-700/30 border-gray-600"
+                            : "bg-orange-500/10 border-orange-500/30 hover:bg-orange-500/20"
+                        }`}
+                        onClick={() => !notification.read && markNotificationAsRead(notification.id)}
+                      >
+                        <CardContent className="p-4">
+                          <div className="flex items-start gap-3">
+                            <div className="flex-shrink-0 mt-0.5">{getNotificationIcon(notification.type)}</div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between mb-1">
+                                <h4 className="text-sm font-medium text-white truncate">{notification.title}</h4>
+                                {!notification.read && (
+                                  <div className="w-2 h-2 bg-orange-400 rounded-full flex-shrink-0 ml-2" />
                                 )}
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleRequestAction(request.id, "reject")}
-                                disabled={processingRequests.has(request.id)}
-                                className="border-red-500/50 text-red-400 hover:bg-red-500/10 bg-transparent"
-                              >
-                                {processingRequests.has(request.id) ? (
-                                  <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                  <>
-                                    <XCircle className="w-4 h-4 mr-1" />
-                                    Decline
-                                  </>
+                              </div>
+                              <p className="text-sm text-gray-300 mb-2">{notification.message}</p>
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs text-gray-500">{formatDate(notification.createdAt)}</span>
+                                {notification.data?.tripName && (
+                                  <Badge className="bg-gray-600/50 text-gray-300 text-xs">
+                                    {notification.data.tripName}
+                                  </Badge>
                                 )}
-                              </Button>
+                              </div>
                             </div>
-                          ) : (
-                            <Badge
-                              variant={request.status === "ACCEPTED" ? "default" : "secondary"}
-                              className={
-                                request.status === "ACCEPTED"
-                                  ? "bg-green-500/20 text-green-400 border-green-500/50"
-                                  : "bg-red-500/20 text-red-400 border-red-500/50"
-                              }
-                            >
-                              {request.status.toLowerCase()}
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
+                          </div>
+                        </CardContent>
+                      </Card>
                     ))}
                   </div>
                 )}

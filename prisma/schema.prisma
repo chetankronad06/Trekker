@@ -26,6 +26,9 @@ model User {
   // Relations for trip requests
   sentRequests     TripRequest[] @relation("RequestSender")
   receivedRequests TripRequest[] @relation("RequestReceiver")
+  
+  // Relations for notifications
+  notifications    Notification[]
 
   @@map("users")
   @@index([clerkId])
@@ -57,11 +60,13 @@ model Trip {
 }
 
 model TripMember {
-  id          String   @id @default(cuid())
-  tripId      String   @map("trip_id")
-  userClerkId String   @map("user_clerk_id")
-  role        UserRole @default(MEMBER)
-  joinedAt    DateTime @default(now()) @map("joined_at")
+  id          String     @id @default(cuid())
+  tripId      String     @map("trip_id")
+  userClerkId String     @map("user_clerk_id")
+  role        UserRole   @default(MEMBER)
+  joinedAt    DateTime   @default(now()) @map("joined_at")
+  joinMethod  JoinMethod @default(UNKNOWN) @map("join_method")
+  joinDetails String?    @map("join_details") // Additional context about how they joined
 
   // Relations
   trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
@@ -112,6 +117,26 @@ model TripRequest {
   @@index([status])
 }
 
+model Notification {
+  id          String            @id @default(cuid())
+  userClerkId String            @map("user_clerk_id")
+  type        NotificationType
+  title       String
+  message     String
+  data        Json?             // Additional data as JSON
+  read        Boolean           @default(false)
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userClerkId], references: [clerkId], onDelete: Cascade)
+
+  @@map("notifications")
+  @@index([userClerkId])
+  @@index([read])
+  @@index([createdAt])
+}
+
 enum TripStatus {
   PLANNED
   ACTIVE
@@ -127,4 +152,21 @@ enum RequestStatus {
   PENDING
   ACCEPTED
   REJECTED
+}
+
+enum JoinMethod {
+  CREATED        // User created the trip (handler)
+  INVITE_CODE    // Joined via invite code
+  INVITE_LINK    // Joined via invite link
+  REQUEST        // Joined via request (browsing/discovery)
+  INVITATION     // Added via invitation from handler
+  UNKNOWN        // Legacy/unknown method
+}
+
+enum NotificationType {
+  MEMBER_REMOVED
+  TRIP_DELETED
+  REQUEST_ACCEPTED
+  REQUEST_REJECTED
+  MEMBER_JOINED
 }

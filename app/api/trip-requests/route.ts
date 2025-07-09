@@ -12,6 +12,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const type = searchParams.get("type") // 'sent' or 'received'
+    const tripId = searchParams.get("tripId")
 
     console.log("🔍 Fetching trip requests for user:", user.id, "type:", type)
 
@@ -71,6 +72,7 @@ export async function GET(request: NextRequest) {
       const receivedRequests = await prisma.tripRequest.findMany({
         where: {
           receiverClerkId: user.id,
+          ...(tripId && { tripId }), // Add tripId filter if provided
         },
         include: {
           trip: {
@@ -176,7 +178,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST - Create a new trip request
+// POST - Create a new trip request (including invitations)
 export async function POST(request: NextRequest) {
   try {
     const user = await currentUser()
@@ -204,21 +206,45 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json().catch(() => ({}))
-    const { tripId, message } = body
+    const { tripId, targetUserClerkId, message, type } = body
 
-    if (!tripId) {
-      return NextResponse.json(
-        {
-          error: "Missing required fields",
-          required: ["tripId"],
-        },
-        { status: 400 },
-      )
+    // Handle different types of requests
+    let requesterClerkId: string
+    let receiverClerkId: string
+
+    if (type === "INVITE") {
+      // Trip handler is inviting someone
+      if (!targetUserClerkId) {
+        return NextResponse.json(
+          {
+            error: "Missing required fields",
+            required: ["tripId", "targetUserClerkId"],
+          },
+          { status: 400 },
+        )
+      }
+      requesterClerkId = targetUserClerkId // The person being invited
+      receiverClerkId = user.id // The trip handler (current user)
+    } else {
+      // Regular join request
+      if (!tripId) {
+        return NextResponse.json(
+          {
+            error: "Missing required fields",
+            required: ["tripId"],
+          },
+          { status: 400 },
+        )
+      }
+      requesterClerkId = user.id
+      // We'll get the receiver from the trip
     }
 
     console.log("🔄 Creating trip request:", {
       tripId,
-      requesterClerkId: user.id,
+      requesterClerkId,
+      receiverClerkId: receiverClerkId || "TBD",
+      type: type || "JOIN",
       message: message || "No message",
     })
 
@@ -242,19 +268,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Set receiver for regular join requests
+    if (type !== "INVITE") {
+      receiverClerkId = trip.handlerClerkId
+    }
+
     console.log("✅ Trip found:", trip.name, "Handler:", trip.handlerClerkId)
 
-    // Ensure trip handler exists in database
-    const tripHandler = await prisma.user.findUnique({
-      where: { clerkId: trip.handlerClerkId },
-    })
+    // Ensure both users exist in database
+    const [requester, receiver] = await Promise.all([
+      prisma.user.findUnique({ where: { clerkId: requesterClerkId } }),
+      prisma.user.findUnique({ where: { clerkId: receiverClerkId } }),
+    ])
 
-    if (!tripHandler) {
-      console.log("⚠️ Trip handler not found in DB")
+    if (!requester || !receiver) {
       return NextResponse.json(
         {
-          error: "Trip handler not found",
-          details: "The trip handler is not properly set up in the database",
+          error: "User not found",
+          details: "One or both users are not properly set up in the database",
         },
         { status: 400 },
       )
@@ -265,7 +296,7 @@ export async function POST(request: NextRequest) {
       where: {
         tripId_userClerkId: {
           tripId: trip.id,
-          userClerkId: user.id,
+          userClerkId: requesterClerkId,
         },
       },
     })
@@ -274,14 +305,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error: "Already a member",
-          details: "You are already a member of this trip",
+          details: "This user is already a member of this trip",
         },
         { status: 400 },
       )
     }
 
-    // Check if user is the trip handler
-    if (trip.handlerClerkId === user.id) {
+    // Check if user is the trip handler (for join requests)
+    if (type !== "INVITE" && trip.handlerClerkId === requesterClerkId) {
       return NextResponse.json(
         {
           error: "Cannot request own trip",
@@ -296,7 +327,7 @@ export async function POST(request: NextRequest) {
       where: {
         tripId_requesterClerkId: {
           tripId: trip.id,
-          requesterClerkId: user.id,
+          requesterClerkId: requesterClerkId,
         },
       },
     })
@@ -305,7 +336,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error: "Request already exists",
-          details: `You already have a ${existingRequest.status.toLowerCase()} request for this trip`,
+          details: `A ${existingRequest.status.toLowerCase()} request already exists for this trip`,
           existingRequest,
         },
         { status: 400 },
@@ -319,8 +350,8 @@ export async function POST(request: NextRequest) {
       const newRequest = await tx.tripRequest.create({
         data: {
           tripId: trip.id,
-          requesterClerkId: user.id,
-          receiverClerkId: trip.handlerClerkId,
+          requesterClerkId: requesterClerkId,
+          receiverClerkId: receiverClerkId,
           message: message || null,
           status: "PENDING",
         },
@@ -359,43 +390,16 @@ export async function POST(request: NextRequest) {
       tripName: tripRequest.trip.name,
       requester: `${tripRequest.requester.firstName} ${tripRequest.requester.lastName}`,
       receiver: `${tripRequest.receiver.firstName} ${tripRequest.receiver.lastName}`,
+      type: type || "JOIN",
     })
-
-    // Verify the request was actually saved
-    const verifyRequest = await prisma.tripRequest.findUnique({
-      where: { id: tripRequest.id },
-    })
-
-    if (!verifyRequest) {
-      console.error("❌ Request was not saved to database!")
-      return NextResponse.json(
-        {
-          error: "Database save failed",
-          details: "The request was not properly saved to the database",
-        },
-        { status: 500 },
-      )
-    }
-
-    console.log("✅ Request verified in database:", verifyRequest.id)
 
     return NextResponse.json({
-      message: "Trip request sent successfully",
+      message: `Trip ${type === "INVITE" ? "invitation" : "request"} sent successfully`,
       request: tripRequest,
       success: true,
     })
   } catch (error) {
     console.error("❌ Error creating trip request:", error)
-
-    // More detailed error logging
-    if (error instanceof Error) {
-      console.error("Error details:", {
-        name: error.name,
-        message: error.message,
-        stack: error.stack,
-      })
-    }
-
     return NextResponse.json(
       {
         error: "Failed to create trip request",

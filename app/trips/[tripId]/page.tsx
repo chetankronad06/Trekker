@@ -1,4 +1,7 @@
 "use client"
+
+import type React from "react"
+
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { useUser } from "@clerk/nextjs"
@@ -6,13 +9,14 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Users, Share2, MessageCircle, MapPin, Calendar, AlertTriangle, Copy } from "lucide-react"
+import { Users, Share2, MessageCircle, MapPin, Calendar, AlertTriangle, Copy, Send, Clock, X, Lock } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { CustomUserButton } from "@/components/custom-user-button"
 import TripChat from "@/components/trip-chat"
 import TripMembers from "@/components/trip-members"
 import InviteUsers from "@/components/invite-users"
 import { useToast } from "@/hooks/use-toast"
+import TripManagementSidebar from "@/components/trip-management-sidebar"
 
 interface Trip {
   id: string
@@ -24,9 +28,20 @@ interface Trip {
   status: string
   inviteCode: string
   handlerClerkId: string
+  handler: {
+    firstName: string
+    lastName: string
+  }
   _count: {
     members: number
   }
+}
+
+interface TripRequest {
+  id: string
+  status: string
+  message: string
+  createdAt: string
 }
 
 export default function TripDetailPage() {
@@ -34,9 +49,12 @@ export default function TripDetailPage() {
   const router = useRouter()
   const { user: clerkUser, isLoaded, isSignedIn } = useUser()
   const [trip, setTrip] = useState<Trip | null>(null)
+  const [isMember, setIsMember] = useState(false)
+  const [existingRequest, setExistingRequest] = useState<TripRequest | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState("")
   const [showInviteDialog, setShowInviteDialog] = useState(false)
+  const [sendingRequest, setSendingRequest] = useState(false)
   const { toast } = useToast()
 
   // Redirect if not signed in
@@ -46,21 +64,40 @@ export default function TripDetailPage() {
     }
   }, [isLoaded, isSignedIn, router])
 
-  // Fetch trip details
+  // Fetch trip details and check membership
   useEffect(() => {
     const fetchTripDetails = async () => {
       if (!isSignedIn || !clerkUser) return
 
       try {
-        const response = await fetch(`/api/trips/${params.tripId}`)
-        const data = await response.json()
+        // First try to get trip as member
+        const memberResponse = await fetch(`/api/trips/${params.tripId}`)
 
-        if (response.ok) {
-          setTrip(data.trip)
-        } else if (response.status === 404) {
-          setError("🗺️ Trip not found or you don't have access to it")
+        if (memberResponse.ok) {
+          const memberData = await memberResponse.json()
+          setTrip(memberData.trip)
+          setIsMember(true)
         } else {
-          setError(data.details || data.error || "🚫 Failed to load trip details")
+          // If not a member, try to get basic trip info
+          const publicResponse = await fetch(`/api/trips/${params.tripId}/public`)
+
+          if (publicResponse.ok) {
+            const publicData = await publicResponse.json()
+            setTrip(publicData.trip)
+            setIsMember(false)
+
+            // Check if user has sent a request
+            const requestsResponse = await fetch("/api/trip-requests?type=sent")
+            if (requestsResponse.ok) {
+              const requestsData = await requestsResponse.json()
+              const request = requestsData.requests.find((req: TripRequest) => req.trip?.id === params.tripId)
+              setExistingRequest(request || null)
+            }
+          } else if (publicResponse.status === 404) {
+            setError("🗺️ Trip not found")
+          } else {
+            setError("🚫 Failed to load trip details")
+          }
         }
       } catch (err) {
         console.error("Error fetching trip details:", err)
@@ -75,9 +112,53 @@ export default function TripDetailPage() {
     }
   }, [isLoaded, isSignedIn, clerkUser, params.tripId])
 
-  const shareTrip = async () => {
+  const handleJoinRequest = async () => {
     if (!trip) return
 
+    setSendingRequest(true)
+    try {
+      const response = await fetch("/api/trip-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tripId: trip.id,
+          message: `I'd like to join "${trip.name}" trip!`,
+        }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setExistingRequest({
+          id: data.request.id,
+          status: "PENDING",
+          message: data.request.message,
+          createdAt: data.request.createdAt,
+        })
+        toast({
+          title: "🎉 Request Sent!",
+          description: "Your join request has been sent to the trip handler.",
+        })
+      } else {
+        const errorData = await response.json()
+        toast({
+          title: "❌ Request Failed",
+          description: errorData.details || "Failed to send join request",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      toast({
+        title: "❌ Error",
+        description: "Failed to send join request",
+        variant: "destructive",
+      })
+    } finally {
+      setSendingRequest(false)
+    }
+  }
+
+  const shareTrip = async () => {
+    if (!trip) return
     const shareUrl = `${window.location.origin}/join/${trip.inviteCode}`
 
     if (navigator.share) {
@@ -87,34 +168,22 @@ export default function TripDetailPage() {
           text: `You're invited to join "${trip.name}" trip! Use invite code: ${trip.inviteCode}`,
           url: shareUrl,
         })
-        toast({
-          title: "🎉 Invite Shared!",
-          description: "Trip invitation shared successfully.",
-        })
+        // Remove the toast notification
       } catch (error) {
         console.log("Share cancelled or failed")
       }
     } else {
-      // Fallback to clipboard
       try {
         await navigator.clipboard.writeText(shareUrl)
-        toast({
-          title: "🔗 Link Copied!",
-          description: "Invite link copied to clipboard.",
-        })
+        // Remove the toast notification
       } catch (error) {
-        toast({
-          title: "❌ Copy Failed",
-          description: "Failed to copy invite link.",
-          variant: "destructive",
-        })
+        // Remove the toast notification
       }
     }
   }
 
   const copyInviteCode = async () => {
     if (!trip) return
-
     try {
       await navigator.clipboard.writeText(trip.inviteCode)
       toast({
@@ -131,11 +200,11 @@ export default function TripDetailPage() {
   }
 
   if (!isLoaded || isLoading) {
-    return null // This will show loading.tsx
+    return null
   }
 
   if (!isSignedIn) {
-    return null // Will redirect via useEffect
+    return null
   }
 
   if (!trip) {
@@ -169,6 +238,7 @@ export default function TripDetailPage() {
   }
 
   const isHandler = clerkUser?.id === trip.handlerClerkId
+  const canAccessFeatures = isMember
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
@@ -195,6 +265,39 @@ export default function TripDetailPage() {
           </Alert>
         )}
 
+        {/* Access Status Alert */}
+        {!canAccessFeatures && (
+          <Alert className="border-yellow-500/50 bg-yellow-500/10 mb-6">
+            <Lock className="h-4 w-4 text-yellow-400" />
+            <AlertDescription className="text-yellow-300">
+              {existingRequest ? (
+                <div className="flex items-center justify-between">
+                  <span>
+                    Your join request is {existingRequest.status.toLowerCase()}.
+                    {existingRequest.status === "PENDING" && " Waiting for trip handler approval."}
+                    {existingRequest.status === "REJECTED" && " Your request was declined."}
+                  </span>
+                  <Badge
+                    className={
+                      existingRequest.status === "PENDING"
+                        ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/50"
+                        : existingRequest.status === "REJECTED"
+                          ? "bg-red-500/20 text-red-400 border-red-500/50"
+                          : "bg-gray-600/20 text-gray-400 border-gray-600/50"
+                    }
+                  >
+                    {existingRequest.status === "PENDING" && <Clock className="w-3 h-3 mr-1" />}
+                    {existingRequest.status === "REJECTED" && <X className="w-3 h-3 mr-1" />}
+                    {existingRequest.status.toLowerCase()}
+                  </Badge>
+                </div>
+              ) : (
+                "You're viewing this trip as a guest. Send a join request to access all features."
+              )}
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Trip Info Card */}
         <Card className="bg-gray-800/90 backdrop-blur-sm border-gray-700 shadow-2xl mb-6">
           <CardContent className="p-6">
@@ -211,6 +314,9 @@ export default function TripDetailPage() {
                   {trip.status.toLowerCase()}
                 </Badge>
                 {isHandler && <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/50">Trip Handler</Badge>}
+                {!canAccessFeatures && (
+                  <Badge className="bg-gray-500/20 text-gray-400 border-gray-500/50">Guest View</Badge>
+                )}
               </div>
               <div className="flex gap-2">
                 <Button
@@ -222,15 +328,28 @@ export default function TripDetailPage() {
                   <Share2 className="w-4 h-4 mr-2" />
                   Share
                 </Button>
-                {isHandler && (
+                {isHandler && canAccessFeatures && (
+                  <>
+                    <Button
+                      onClick={() => setShowInviteDialog(true)}
+                      variant="outline"
+                      size="sm"
+                      className="border-green-500/50 text-green-400 hover:bg-green-500/10"
+                    >
+                      <Users className="w-4 h-4 mr-2" />
+                      Invite
+                    </Button>
+                    <TripManagementSidebar tripId={trip.id} tripName={trip.name} isHandler={isHandler} />
+                  </>
+                )}
+                {!canAccessFeatures && !existingRequest && (
                   <Button
-                    onClick={() => setShowInviteDialog(true)}
-                    variant="outline"
-                    size="sm"
-                    className="border-green-500/50 text-green-400 hover:bg-green-500/10"
+                    onClick={handleJoinRequest}
+                    disabled={sendingRequest}
+                    className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white"
                   >
-                    <Users className="w-4 h-4 mr-2" />
-                    Invite
+                    <Send className="w-4 h-4 mr-2" />
+                    {sendingRequest ? "Sending..." : "Request to Join"}
                   </Button>
                 )}
               </div>
@@ -283,68 +402,130 @@ export default function TripDetailPage() {
                   <Copy className="w-4 h-4" />
                 </Button>
               </div>
+              {trip.handler && (
+                <div className="mt-2 text-sm text-gray-400">
+                  Organized by {trip.handler.firstName} {trip.handler.lastName}
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
 
-        {/* Tabs with Fixed Height */}
+        {/* Tabs with Access Control */}
         <div className="h-[600px] flex flex-col">
           <Tabs defaultValue="chat" className="flex-1 flex flex-col">
             <TabsList className="grid w-full grid-cols-3 bg-gray-800/50 border-gray-700 flex-shrink-0">
               <TabsTrigger
                 value="chat"
-                className="data-[state=active]:bg-green-500/20 data-[state=active]:text-green-400 text-gray-400"
+                disabled={!canAccessFeatures}
+                className="data-[state=active]:bg-green-500/20 data-[state=active]:text-green-400 text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <MessageCircle className="w-4 h-4 mr-2" />
-                Chat
+                Chat {!canAccessFeatures && <Lock className="w-3 h-3 ml-1" />}
               </TabsTrigger>
               <TabsTrigger
                 value="members"
-                className="data-[state=active]:bg-green-500/20 data-[state=active]:text-green-400 text-gray-400"
+                disabled={!canAccessFeatures}
+                className="data-[state=active]:bg-green-500/20 data-[state=active]:text-green-400 text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Users className="w-4 h-4 mr-2" />
-                Members
+                Members {!canAccessFeatures && <Lock className="w-3 h-3 ml-1" />}
               </TabsTrigger>
               <TabsTrigger
                 value="expenses"
-                className="data-[state=active]:bg-green-500/20 data-[state=active]:text-green-400 text-gray-400"
+                disabled={!canAccessFeatures}
+                className="data-[state=active]:bg-green-500/20 data-[state=active]:text-green-400 text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                💰 Expenses
+                💰 Expenses {!canAccessFeatures && <Lock className="w-3 h-3 ml-1" />}
               </TabsTrigger>
             </TabsList>
 
             <TabsContent value="chat" className="flex-1 mt-6">
-              <TripChat tripId={trip.id} />
+              {canAccessFeatures ? (
+                <TripChat tripId={trip.id} />
+              ) : (
+                <DisabledFeatureCard
+                  title="Group Chat"
+                  description="Join the trip to participate in group discussions"
+                  icon={<MessageCircle className="w-8 h-8" />}
+                />
+              )}
             </TabsContent>
 
             <TabsContent value="members" className="flex-1 mt-6">
-              <TripMembers tripId={trip.id} />
+              {canAccessFeatures ? (
+                <TripMembers tripId={trip.id} />
+              ) : (
+                <DisabledFeatureCard
+                  title="Trip Members"
+                  description="Join the trip to see and interact with other members"
+                  icon={<Users className="w-8 h-8" />}
+                />
+              )}
             </TabsContent>
 
             <TabsContent value="expenses" className="flex-1 mt-6">
-              <Card className="bg-gray-800/90 backdrop-blur-sm border-gray-700 shadow-2xl h-full">
-                <CardHeader>
-                  <CardTitle className="text-white">Expenses</CardTitle>
-                  <CardDescription className="text-gray-400">Track and manage trip expenses</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-center py-12">
-                    <div className="w-16 h-16 bg-gray-700/50 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <span className="text-2xl">💰</span>
+              {canAccessFeatures ? (
+                <Card className="bg-gray-800/90 backdrop-blur-sm border-gray-700 shadow-2xl h-full">
+                  <CardHeader>
+                    <CardTitle className="text-white">Expenses</CardTitle>
+                    <CardDescription className="text-gray-400">Track and manage trip expenses</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-center py-12">
+                      <div className="w-16 h-16 bg-gray-700/50 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <span className="text-2xl">💰</span>
+                      </div>
+                      <h3 className="text-lg font-semibold text-white mb-2">Expense Tracking Coming Soon</h3>
+                      <p className="text-gray-400">
+                        UPI screenshot upload and automatic expense splitting will be available soon!
+                      </p>
                     </div>
-                    <h3 className="text-lg font-semibold text-white mb-2">Expense Tracking Coming Soon</h3>
-                    <p className="text-gray-400">
-                      UPI screenshot upload and automatic expense splitting will be available soon!
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              ) : (
+                <DisabledFeatureCard
+                  title="Expense Tracking"
+                  description="Join the trip to track and split expenses with other members"
+                  icon={<span className="text-4xl">💰</span>}
+                />
+              )}
             </TabsContent>
           </Tabs>
         </div>
 
-        <InviteUsers tripId={trip.id} open={showInviteDialog} onOpenChange={setShowInviteDialog} />
+        {canAccessFeatures && (
+          <InviteUsers tripId={trip.id} open={showInviteDialog} onOpenChange={setShowInviteDialog} />
+        )}
       </div>
     </div>
+  )
+}
+
+// Disabled Feature Card Component
+function DisabledFeatureCard({
+  title,
+  description,
+  icon,
+}: {
+  title: string
+  description: string
+  icon: React.ReactNode
+}) {
+  return (
+    <Card className="bg-gray-800/90 backdrop-blur-sm border-gray-700 shadow-2xl h-full">
+      <CardContent className="flex items-center justify-center h-full">
+        <div className="text-center py-12">
+          <div className="w-16 h-16 bg-gray-700/30 rounded-full flex items-center justify-center mx-auto mb-4 opacity-50">
+            {icon}
+          </div>
+          <div className="flex items-center justify-center gap-2 mb-2">
+            <Lock className="w-5 h-5 text-gray-500" />
+            <h3 className="text-lg font-semibold text-gray-400">{title}</h3>
+          </div>
+          <p className="text-gray-500 max-w-md">{description}</p>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
