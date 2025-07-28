@@ -32,7 +32,7 @@ export async function POST(request: NextRequest, { params }: { params: { inviteC
     }
 
     const body = await request.json().catch(() => ({}))
-    const { message } = body
+    const { message, checkOnly } = body
 
     // Find trip by invite code
     const trip = await prisma.trip.findUnique({
@@ -62,22 +62,6 @@ export async function POST(request: NextRequest, { params }: { params: { inviteC
 
     console.log("✅ Trip found:", trip.name, "Handler:", trip.handlerClerkId)
 
-    // Ensure trip handler exists in database
-    const tripHandler = await prisma.user.findUnique({
-      where: { clerkId: trip.handlerClerkId },
-    })
-
-    if (!tripHandler) {
-      console.log("⚠️ Trip handler not found in DB")
-      return NextResponse.json(
-        {
-          error: "Trip handler not found",
-          details: "The trip handler is not properly set up in the database",
-        },
-        { status: 400 },
-      )
-    }
-
     // Check if user is already a member
     const existingMember = await prisma.tripMember.findUnique({
       where: {
@@ -93,7 +77,6 @@ export async function POST(request: NextRequest, { params }: { params: { inviteC
       return NextResponse.json({
         message: "Already a member",
         trip,
-        isNew: false,
         status: "member",
       })
     }
@@ -124,10 +107,33 @@ export async function POST(request: NextRequest, { params }: { params: { inviteC
       return NextResponse.json({
         message: `Request already ${existingRequest.status.toLowerCase()}`,
         trip,
-        isNew: false,
         status: existingRequest.status.toLowerCase(),
         request: existingRequest,
       })
+    }
+
+    // If this is just a status check, return that no request exists
+    if (checkOnly) {
+      return NextResponse.json({
+        trip,
+        status: "none",
+      })
+    }
+
+    // Ensure trip handler exists in database
+    const tripHandler = await prisma.user.findUnique({
+      where: { clerkId: trip.handlerClerkId },
+    })
+
+    if (!tripHandler) {
+      console.log("⚠️ Trip handler not found in DB")
+      return NextResponse.json(
+        {
+          error: "Trip handler not found",
+          details: "The trip handler is not properly set up in the database",
+        },
+        { status: 400 },
+      )
     }
 
     console.log("🔄 Creating trip join request:", {
@@ -142,7 +148,6 @@ export async function POST(request: NextRequest, { params }: { params: { inviteC
     // Create trip request with explicit transaction
     const tripRequest = await prisma.$transaction(async (tx) => {
       console.log("🔄 Starting transaction to create trip request...")
-
       const newRequest = await tx.tripRequest.create({
         data: {
           tripId: trip.id,
@@ -175,7 +180,6 @@ export async function POST(request: NextRequest, { params }: { params: { inviteC
           },
         },
       })
-
       console.log("✅ Trip request created in transaction:", newRequest.id)
       return newRequest
     })
@@ -188,44 +192,15 @@ export async function POST(request: NextRequest, { params }: { params: { inviteC
       receiver: `${tripRequest.receiver.firstName} ${tripRequest.receiver.lastName}`,
     })
 
-    // Verify the request was actually saved
-    const verifyRequest = await prisma.tripRequest.findUnique({
-      where: { id: tripRequest.id },
-    })
-
-    if (!verifyRequest) {
-      console.error("❌ Request was not saved to database!")
-      return NextResponse.json(
-        {
-          error: "Database save failed",
-          details: "The request was not properly saved to the database",
-        },
-        { status: 500 },
-      )
-    }
-
-    console.log("✅ Request verified in database:", verifyRequest.id)
-
     return NextResponse.json({
       message: "Trip request sent successfully",
       trip,
-      isNew: true,
       status: "pending",
       request: tripRequest,
       success: true,
     })
   } catch (error) {
     console.error("❌ Error processing join request:", error)
-
-    // More detailed error logging
-    if (error instanceof Error) {
-      console.error("Error details:", {
-        name: error.name,
-        message: error.message,
-        stack: error.stack,
-      })
-    }
-
     return NextResponse.json(
       {
         error: "Failed to process join request",
@@ -272,6 +247,7 @@ export async function GET(request: NextRequest, { params }: { params: { inviteCo
     }
 
     console.log("✅ Trip found:", trip.name)
+
     return NextResponse.json({ trip })
   } catch (error) {
     console.error("❌ Error fetching trip:", error)

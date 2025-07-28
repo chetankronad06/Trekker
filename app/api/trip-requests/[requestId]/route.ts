@@ -125,6 +125,36 @@ export async function PUT(request: NextRequest, { params }: { params: { requestI
             role: "MEMBER",
           },
         })
+        await tx.notification.create({
+        data: {
+          userClerkId:  tripRequest.requesterClerkId,
+          type: "REQUEST_ACCEPTED",
+          title: "Request Accepted",
+          message: `Your request to join "${tripRequest.trip.name}" has been accepted.`,
+          data: {
+            tripId: tripRequest.tripId,
+            tripName: tripRequest.trip.name,
+            acceptedBy: user.id,
+            acceptedAt: new Date().toISOString(),
+          },
+        },
+      })
+      }
+      if (newStatus === "REJECTED") {
+        await tx.notification.create({
+        data: {
+          userClerkId:  tripRequest.requesterClerkId,
+          type: "REQUEST_REJECTED",
+          title: "Request Rejected",
+          message: `Your request to join "${tripRequest.trip.name}" has been rejected.`,
+          data: {
+            tripId: tripRequest.tripId,
+            tripName: tripRequest.trip.name,
+            rejectedBy: user.id,
+            rejectedAt: new Date().toISOString(),
+          },
+        },
+      })
       }
 
       return updatedRequest

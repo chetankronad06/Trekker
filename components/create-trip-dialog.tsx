@@ -64,10 +64,10 @@ export default function CreateTripDialog({ open, onOpenChange, onTripCreated }: 
         body: JSON.stringify(formData),
       })
 
-      const data = await response.json()
+      const text = await response.text()
+      const data = text ? JSON.parse(text) : null
 
       if (response.ok) {
-        // Use toast instead of success state
         toast({
           title: "🎉 Trip Created Successfully!",
           description: `${data.trip.name} is ready for your adventure. Share invite code: ${data.trip.inviteCode}`,
@@ -82,7 +82,7 @@ export default function CreateTripDialog({ open, onOpenChange, onTripCreated }: 
           endDate: "",
         })
       } else {
-        setError(data.details || data.error || "🚫 Failed to create trip")
+        setError(data?.details || data?.error || "🚫 Failed to create trip")
       }
     } catch (err) {
       console.error("Error creating trip:", err)

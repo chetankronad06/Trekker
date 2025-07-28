@@ -1,6 +1,5 @@
 generator client {
   provider = "prisma-client-js"
-  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {
@@ -26,6 +25,11 @@ model User {
   // Relations for trip requests
   sentRequests     TripRequest[] @relation("RequestSender")
   receivedRequests TripRequest[] @relation("RequestReceiver")
+  
+  // Relations for notifications and expenses
+  notifications    Notification[]
+  expenses         Expense[]
+  expenseSplits    ExpenseSplit[]
 
   @@map("users")
   @@index([clerkId])
@@ -50,6 +54,7 @@ model Trip {
   members  TripMember[]
   messages TripMessage[]
   requests TripRequest[]
+  expenses Expense[]
 
   @@map("trips")
   @@index([handlerClerkId])
@@ -57,11 +62,13 @@ model Trip {
 }
 
 model TripMember {
-  id          String   @id @default(cuid())
-  tripId      String   @map("trip_id")
-  userClerkId String   @map("user_clerk_id")
-  role        UserRole @default(MEMBER)
-  joinedAt    DateTime @default(now()) @map("joined_at")
+  id          String     @id @default(cuid())
+  tripId      String     @map("trip_id")
+  userClerkId String     @map("user_clerk_id")
+  role        UserRole   @default(MEMBER)
+  joinedAt    DateTime   @default(now()) @map("joined_at")
+  joinMethod  JoinMethod @default(UNKNOWN) @map("join_method")
+  joinDetails String?    @map("join_details")
 
   // Relations
   trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
@@ -93,9 +100,9 @@ model TripRequest {
   id              String        @id @default(cuid())
   tripId          String        @map("trip_id")
   requesterClerkId String       @map("requester_clerk_id")
-  receiverClerkId String        @map("receiver_clerk_id") // Trip handler
+  receiverClerkId String        @map("receiver_clerk_id")
   status          RequestStatus @default(PENDING)
-  message         String?       // Optional message from requester
+  message         String?
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @updatedAt @map("updated_at")
 
@@ -104,12 +111,79 @@ model TripRequest {
   requester User @relation("RequestSender", fields: [requesterClerkId], references: [clerkId])
   receiver  User @relation("RequestReceiver", fields: [receiverClerkId], references: [clerkId])
 
-  @@unique([tripId, requesterClerkId]) // Prevent duplicate requests
+  @@unique([tripId, requesterClerkId])
   @@map("trip_requests")
   @@index([tripId])
   @@index([requesterClerkId])
   @@index([receiverClerkId])
   @@index([status])
+}
+
+model Notification {
+  id          String            @id @default(cuid())
+  userClerkId String            @map("user_clerk_id")
+  type        NotificationType
+  title       String
+  message     String
+  data        Json?
+  read        Boolean           @default(false)
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userClerkId], references: [clerkId], onDelete: Cascade)
+
+  @@map("notifications")
+  @@index([userClerkId])
+  @@index([read])
+  @@index([createdAt])
+}
+
+model Expense {
+  id              String         @id @default(cuid())
+  tripId          String         @map("trip_id")
+  paidByClerkId   String         @map("paid_by_clerk_id")
+  amount          Decimal        @db.Decimal(10, 2)
+  description     String
+  category        ExpenseCategory @default(MISCELLANEOUS)
+  merchantName    String?        @map("merchant_name")
+  merchantUPI     String?        @map("merchant_upi")
+  transactionId   String?        @map("transaction_id")
+  paymentMethod   String?        @map("payment_method")
+  screenshotUrl   String?        @map("screenshot_url")
+  ocrData         Json?          @map("ocr_data")
+  splitMethod     SplitMethod    @default(EQUAL)
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  // Relations
+  trip      Trip           @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  paidBy    User           @relation(fields: [paidByClerkId], references: [clerkId])
+  splits    ExpenseSplit[]
+
+  @@map("expenses")
+  @@index([tripId])
+  @@index([paidByClerkId])
+  @@index([createdAt])
+}
+
+model ExpenseSplit {
+  id              String  @id @default(cuid())
+  expenseId       String  @map("expense_id")
+  userClerkId     String  @map("user_clerk_id")
+  amount          Decimal @db.Decimal(10, 2)
+  settled         Boolean @default(false)
+  settledAt       DateTime? @map("settled_at")
+
+  // Relations
+  expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userClerkId], references: [clerkId])
+
+  @@unique([expenseId, userClerkId])
+  @@map("expense_splits")
+  @@index([expenseId])
+  @@index([userClerkId])
+  @@index([settled])
 }
 
 enum TripStatus {
@@ -127,4 +201,39 @@ enum RequestStatus {
   PENDING
   ACCEPTED
   REJECTED
+}
+
+enum JoinMethod {
+  CREATED
+  INVITE_CODE
+  INVITE_LINK
+  REQUEST
+  INVITATION
+  UNKNOWN
+}
+
+enum NotificationType {
+  MEMBER_REMOVED
+  TRIP_DELETED
+  REQUEST_ACCEPTED
+  REQUEST_REJECTED
+  MEMBER_JOINED
+  EXPENSE_ADDED
+  EXPENSE_SETTLED
+}
+
+enum ExpenseCategory {
+  FOOD
+  TRANSPORT
+  ACCOMMODATION
+  ACTIVITIES
+  SHOPPING
+  MEDICAL
+  MISCELLANEOUS
+}
+
+enum SplitMethod {
+  EQUAL
+  CUSTOM
+  PERCENTAGE
 }
