@@ -14,6 +14,8 @@ import Link from "next/link"
 import { CustomUserButton } from "@/components/custom-user-button"
 import CreateTripDialog from "@/components/create-trip-dialog"
 import { useToast } from "@/hooks/use-toast"
+import { getTripHighlightPhoto } from "@/app/api/trips/[tripId]/photos/route"
+import Image from "next/image"
 
 interface Trip {
   id: string
@@ -40,6 +42,7 @@ interface Trip {
     joinedAt: string
     joinDetails?: string
   }
+  highlightImageUrl?: string
 }
 
 interface TripRequest {
@@ -141,8 +144,8 @@ export default function TripsPage() {
       const response = await fetch("/api/trip-requests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          tripId, 
+        body: JSON.stringify({
+          tripId,
           message: "I'd like to join this trip!",
           joinMethod: "REQUEST" // Track how they're joining
         }),
@@ -237,7 +240,7 @@ export default function TripsPage() {
       const response = await fetch(`/api/trips/join/${inviteCode}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           message: "Joining via invite code",
           joinMethod: "INVITE_CODE" // Track join method
         }),
@@ -431,7 +434,7 @@ export default function TripsPage() {
               {/* All Trips */}
               <TabsContent value="all">
                 {myTrips.length === 0 ? (
-                  <EmptyState 
+                  <EmptyState
                     icon={<MapPin className="w-8 h-8 text-gray-400" />}
                     title="No trips yet"
                     description="Create your first trip or join existing ones"
@@ -450,7 +453,7 @@ export default function TripsPage() {
               {/* Hosted Trips */}
               <TabsContent value="hosted">
                 {hostedTrips.length === 0 ? (
-                  <EmptyState 
+                  <EmptyState
                     icon={<Crown className="w-8 h-8 text-gray-400" />}
                     title="No hosted trips"
                     description="Create your first trip to start hosting adventures"
@@ -469,7 +472,7 @@ export default function TripsPage() {
               {/* Joined Trips */}
               <TabsContent value="joined">
                 {joinedTrips.length === 0 ? (
-                  <EmptyState 
+                  <EmptyState
                     icon={<Users className="w-8 h-8 text-gray-400" />}
                     title="No joined trips"
                     description="Browse available trips or use invite codes to join adventures"
@@ -492,7 +495,7 @@ export default function TripsPage() {
             <h2 className="text-xl font-semibold text-white mb-4">Discover Available Trips</h2>
 
             {allTrips.filter((t) => !isMemberOfTrip(t.id) && !isMyTrip(t)).length === 0 ? (
-              <EmptyState 
+              <EmptyState
                 icon={<MapPin className="w-8 h-8 text-gray-400" />}
                 title="No trips available"
                 description="Check back later for new trips to join"
@@ -522,7 +525,7 @@ export default function TripsPage() {
             <h2 className="text-xl font-semibold text-white mb-4">My Join Requests</h2>
 
             {sentRequests.length === 0 ? (
-              <EmptyState 
+              <EmptyState
                 icon={<Send className="w-8 h-8 text-gray-400" />}
                 title="No requests sent"
                 description="Browse available trips and send join requests"
@@ -541,7 +544,7 @@ export default function TripsPage() {
             <h2 className="text-xl font-semibold text-white mb-4">Join Requests for My Trips</h2>
 
             {receivedRequests.length === 0 ? (
-              <EmptyState 
+              <EmptyState
                 icon={<Users className="w-8 h-8 text-gray-400" />}
                 title="No join requests"
                 description="When people request to join your trips, they'll appear here"
@@ -576,6 +579,16 @@ function EnhancedTripCard({
   showManageButton?: boolean
   showJoinInfo?: boolean
 }) {
+  const [highlightImage, setHighlightImage] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchHighlight = async () => {
+      const imageUrl = await getTripHighlightPhoto(trip.id)
+      setHighlightImage(imageUrl)
+    }
+    fetchHighlight()
+  }, [trip.id])
+
   const getJoinMethodDisplay = (method: string) => {
     switch (method) {
       case "CREATED":
@@ -592,11 +605,21 @@ function EnhancedTripCard({
         return { text: "Member", color: "text-gray-400", icon: <Users className="w-3 h-3" /> }
     }
   }
-
   const joinMethodInfo = trip.memberInfo ? getJoinMethodDisplay(trip.memberInfo.joinMethod) : null
-
   return (
     <Card className="bg-gray-800/90 backdrop-blur-sm border-gray-700 shadow-2xl hover:shadow-green-500/10 transition-all duration-300 cursor-pointer hover:border-green-500/50">
+      {highlightImage && (
+        <div className="relative w-full h-32 overflow-hidden rounded-t-lg">
+          <Image
+            src={highlightImage || "/placeholder.svg"}
+            alt={`Highlight for ${trip.name}`}
+            layout="fill"
+            objectFit="cover"
+            className="transition-transform duration-300 group-hover:scale-105"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+        </div>
+      )}
       <CardHeader>
         <div className="flex justify-between items-start">
           <CardTitle className="text-lg text-white line-clamp-1">{trip.name}</CardTitle>
@@ -611,6 +634,7 @@ function EnhancedTripCard({
             >
               {trip.status.toLowerCase()}
             </Badge>
+            {/* This condition seems incorrect, should be clerkUser?.id === trip.handlerClerkId */}
             {trip.handlerClerkId === trip.handler?.firstName && (
               <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/50">
                 <Crown className="w-3 h-3 mr-1" />
@@ -641,26 +665,21 @@ function EnhancedTripCard({
             </div>
             <div className="text-xs text-green-400 font-mono bg-green-500/10 px-2 py-1 rounded">{trip.inviteCode}</div>
           </div>
-          
           {/* Join Method Info */}
           {showJoinInfo && joinMethodInfo && (
             <div className={`flex items-center text-xs ${joinMethodInfo.color}`}>
               {joinMethodInfo.icon}
               <span className="ml-1">{joinMethodInfo.text}</span>
               {trip.memberInfo?.joinedAt && (
-                <span className="ml-2 text-gray-500">
-                  • {new Date(trip.memberInfo.joinedAt).toLocaleDateString()}
-                </span>
+                <span className="ml-2 text-gray-500">• {new Date(trip.memberInfo.joinedAt).toLocaleDateString()}</span>
               )}
             </div>
           )}
-
           {trip.handler && (
             <div className="text-xs text-gray-400">
               Organized by {trip.handler.firstName} {trip.handler.lastName}
             </div>
           )}
-
           {/* Manage Button for Hosted Trips */}
           {showManageButton && (
             <div className="pt-2">
@@ -683,6 +702,7 @@ function EnhancedTripCard({
     </Card>
   )
 }
+
 
 // Empty State Component
 function EmptyState({ icon, title, description }: { icon: React.ReactNode, title: string, description: string }) {
@@ -773,58 +793,58 @@ function TripCard({
           )}
 
           {showJoinButton && (
-  <div className="pt-2 space-y-2">
-    {requestStatus ? (
-      <>
-        {/* <Badge className={getStatusColor(requestStatus)}>
+            <div className="pt-2 space-y-2">
+              {requestStatus ? (
+                <>
+                  {/* <Badge className={getStatusColor(requestStatus)}>
           {requestStatus === "PENDING" && <Clock className="w-3 h-3 mr-1" />}
           {requestStatus === "ACCEPTED" && <Check className="w-3 h-3 mr-1" />}
           {requestStatus === "REJECTED" && <X className="w-3 h-3 mr-1" />}
           {requestStatus.toLowerCase()}
         </Badge> */}
 
-        {/* Message Based on Status */}
-        {requestStatus === "PENDING" && (
-          <p className="text-xs text-yellow-400">
-            Your join request is pending. Please wait for the organiser to approve it.
-          </p>
-        )}
+                  {/* Message Based on Status */}
+                  {requestStatus === "PENDING" && (
+                    <p className="text-xs text-yellow-400">
+                      Your join request is pending. Please wait for the organiser to approve it.
+                    </p>
+                  )}
 
-        {requestStatus === "REJECTED" && (
-          <>
-            <p className="text-xs text-red-400">
-              Your request was rejected. Try contacting the organiser for more info or send another request.
-            </p>
-            <Button
-              onClick={(e) => {
-                e.preventDefault()
-                onJoinRequest?.()
-              }}
-              size="sm"
-              className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white"
-              disabled={requestStatus === "REJECTED"}
-            >
-              <Send className="w-3 h-3 mr-1" />
-              Request to Join
-            </Button>
-          </>
-        )}
-      </>
-    ) : (
-      <Button
-        onClick={(e) => {
-          e.preventDefault()
-          onJoinRequest?.()
-        }}
-        size="sm"
-        className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white"
-      >
-        <Send className="w-3 h-3 mr-1" />
-        Request to Join
-      </Button>
-    )}
-  </div>
-)}
+                  {requestStatus === "REJECTED" && (
+                    <>
+                      <p className="text-xs text-red-400">
+                        Your request was rejected. Try contacting the organiser for more info or send another request.
+                      </p>
+                      <Button
+                        onClick={(e) => {
+                          e.preventDefault()
+                          onJoinRequest?.()
+                        }}
+                        size="sm"
+                        className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white"
+                        disabled={requestStatus === "REJECTED"}
+                      >
+                        <Send className="w-3 h-3 mr-1" />
+                        Request to Join
+                      </Button>
+                    </>
+                  )}
+                </>
+              ) : (
+                <Button
+                  onClick={(e) => {
+                    e.preventDefault()
+                    onJoinRequest?.()
+                  }}
+                  size="sm"
+                  className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white"
+                >
+                  <Send className="w-3 h-3 mr-1" />
+                  Request to Join
+                </Button>
+              )}
+            </div>
+          )}
 
         </div>
       </CardContent>

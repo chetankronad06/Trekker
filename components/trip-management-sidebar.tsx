@@ -272,9 +272,8 @@ export default function TripManagementSidebar({ tripId, tripName, isHandler }: T
     <Sheet>
       <SheetTrigger asChild>
         <Button
-          variant="outline"
           size="sm"
-          className="border-blue-500/50 text-blue-400 hover:bg-blue-500/10 bg-transparent"
+          className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white"
         >
           <Settings className="w-4 h-4 mr-2" />
           Manage Trip
@@ -287,7 +286,7 @@ export default function TripManagementSidebar({ tripId, tripName, isHandler }: T
             Manage Trip
           </SheetTitle>
           <SheetDescription className="text-gray-400">
-            Manage members, invitations, and trip settings for "{tripName}"
+            Manage members, invitations, and trip settings for &apos;{tripName}&apos;
           </SheetDescription>
         </SheetHeader>
 

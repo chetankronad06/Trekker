@@ -62,11 +62,11 @@ export default function TripMembers({ tripId }: TripMembersProps) {
 
   if (isLoading) {
     return (
-      <Card className="bg-gray-800/90 backdrop-blur-sm border-gray-700 shadow-2xl">
-        <CardContent className="flex justify-center items-center h-64">
+      <Card className="bg-gray-800/90 backdrop-blur-sm border-gray-700 shadow-2xl h-full">
+        <CardContent className="flex items-center justify-center h-full">
           <div className="text-center">
-            <Loader2 className="w-8 h-8 mx-auto mb-4 animate-spin text-green-500" />
-            <p className="text-gray-400">Loading members...</p>
+            <Loader2 className="w-8 h-8 text-green-500 animate-spin mx-auto mb-2" />
+            <p className="text-gray-400">Loading messages...</p>
           </div>
         </CardContent>
       </Card>
@@ -87,7 +87,7 @@ export default function TripMembers({ tripId }: TripMembersProps) {
   }
 
   return (
-    <Card className="bg-gray-800/90 backdrop-blur-sm border-gray-700 shadow-2xl">
+    <Card className="bg-gray-800/90 backdrop-blur-sm border-gray-700 shadow-2xl h-[500px] ">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-white">
           <Users className="w-5 h-5 text-green-400" />

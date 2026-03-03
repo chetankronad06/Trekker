@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Send, MessageCircle, Users, Clock, Loader2 } from "lucide-react"
+import { Send, MessageCircle, Users, Clock, Loader2, Receipt } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { connectSocket, disconnectSocket } from "@/lib/socket"
 import type { Socket } from "socket.io-client"
@@ -177,11 +177,25 @@ export default function TripChat({ tripId }: TripChatProps) {
 
   if (isLoading) {
     return (
-      <Card className="bg-gray-800/90 backdrop-blur-sm border-gray-700 shadow-2xl h-full">
-        <CardContent className="flex items-center justify-center h-full">
-          <div className="text-center">
-            <Loader2 className="w-8 h-8 text-green-500 animate-spin mx-auto mb-2" />
-            <p className="text-gray-400">Loading messages...</p>
+      <Card className="bg-gray-800/90 backdrop-blur-sm border-gray-700 shadow-2xl flex flex-col h-[500px]">
+        <CardHeader className="pb-3 border-b border-gray-700 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <MessageCircle className="w-5 h-5 text-green-400" />
+              <CardTitle className="text-white text-lg">Group Chat</CardTitle>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="flex-1 p-0 overflow-hidden flex flex-col">
+          <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4 min-h-0">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className={`flex ${i % 2 === 0 ? "justify-start" : "justify-end"} animate-pulse`}>
+                <div className="flex max-w-[70%] gap-2">
+                  <div className="w-8 h-8 bg-gray-700 rounded-full"></div>
+                  <div className="bg-gray-700 rounded-2xl p-3 min-w-[120px] h-16"></div>
+                </div>
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>
@@ -231,7 +245,7 @@ export default function TripChat({ tripId }: TripChatProps) {
                 currentUserId !== nextUserId ||
                 (index < messages.length - 1 &&
                   new Date(messages[index + 1].createdAt).getTime() - new Date(message.createdAt).getTime() >
-                    5 * 60 * 1000)
+                  5 * 60 * 1000)
 
               const userName = getUserName(message)
 
@@ -248,9 +262,8 @@ export default function TripChat({ tripId }: TripChatProps) {
                         />
                       ) : (
                         <div
-                          className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium text-white ${
-                            isMe ? "bg-green-500" : "bg-blue-500"
-                          }`}
+                          className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium text-white ${isMe ? "bg-green-500" : "bg-blue-500"
+                            }`}
                         >
                           {getInitials(message.user?.firstName, message.user?.lastName, userName)}
                         </div>
@@ -264,11 +277,10 @@ export default function TripChat({ tripId }: TripChatProps) {
 
                       {/* Message Bubble */}
                       <div
-                        className={`px-4 py-2 rounded-2xl max-w-full break-words ${
-                          isMe
+                        className={`px-4 py-2 rounded-2xl max-w-full break-words ${isMe
                             ? "bg-gradient-to-r from-green-500 to-green-600 text-white rounded-br-md"
                             : "bg-gray-700 text-white rounded-bl-md"
-                        }`}
+                          }`}
                       >
                         <p className="text-sm leading-relaxed">{message.message}</p>
                       </div>

@@ -16,20 +16,18 @@ model User {
   profileImageUrl  String?  @map("profile_image_url")
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
-
   // Relations for trip management
   handledTrips     Trip[]        @relation("TripHandler")
   tripMemberships  TripMember[]
   tripMessages     TripMessage[]
-  
   // Relations for trip requests
   sentRequests     TripRequest[] @relation("RequestSender")
   receivedRequests TripRequest[] @relation("RequestReceiver")
-  
   // Relations for notifications and expenses
   notifications    Notification[]
   expenses         Expense[]
   expenseSplits    ExpenseSplit[]
+  uploadedPhotos   TripPhoto[]   // New: Relation for photos uploaded by this user
 
   @@map("users")
   @@index([clerkId])
@@ -37,24 +35,28 @@ model User {
 }
 
 model Trip {
-  id            String     @id @default(cuid())
-  name          String
-  description   String?
-  startDate     DateTime?  @map("start_date")
-  endDate       DateTime?  @map("end_date")
-  startingPoint String?    @map("starting_point")
-  status        TripStatus @default(PLANNED)
-  handlerClerkId String    @map("handler_clerk_id")
-  inviteCode    String     @unique @map("invite_code")
-  createdAt     DateTime   @default(now()) @map("created_at")
-  updatedAt     DateTime   @updatedAt @map("updated_at")
+  id                 String     @id @default(cuid())
+  name               String
+  description        String?
+  startDate          DateTime?  @map("start_date")
+  endDate            DateTime?  @map("end_date")
+  startingPoint      String?    @map("starting_point")
+  status             TripStatus @default(PLANNED)
+  handlerClerkId     String     @map("handler_clerk_id")
+  inviteCode         String     @unique @map("invite_code")
+  createdAt          DateTime   @default(now()) @map("created_at")
+  updatedAt          DateTime   @updatedAt @map("updated_at")
+  // New: Fields for scrapbook and sharing
+  isScrapbookPublic  Boolean    @default(false) @map("is_scrapbook_public")
+  scrapbookShareLink String?    @unique @map("scrapbook_share_link")
 
   // Relations
-  handler  User          @relation("TripHandler", fields: [handlerClerkId], references: [clerkId])
-  members  TripMember[]
-  messages TripMessage[]
-  requests TripRequest[]
-  expenses Expense[]
+  handler            User          @relation("TripHandler", fields: [handlerClerkId], references: [clerkId])
+  members            TripMember[]
+  messages           TripMessage[]
+  requests           TripRequest[]
+  expenses           Expense[]
+  photos             TripPhoto[]   // New: Relation for trip photos
 
   @@map("trips")
   @@index([handlerClerkId])
@@ -69,11 +71,9 @@ model TripMember {
   joinedAt    DateTime   @default(now()) @map("joined_at")
   joinMethod  JoinMethod @default(UNKNOWN) @map("join_method")
   joinDetails String?    @map("join_details")
-
   // Relations
   trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
   user User @relation(fields: [userClerkId], references: [clerkId])
-
   @@unique([tripId, userClerkId])
   @@map("trip_members")
   @@index([tripId])
@@ -86,11 +86,9 @@ model TripMessage {
   userClerkId String   @map("user_clerk_id")
   message     String
   createdAt   DateTime @default(now()) @map("created_at")
-
   // Relations
   trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
   user User @relation(fields: [userClerkId], references: [clerkId])
-
   @@map("trip_messages")
   @@index([tripId])
   @@index([createdAt])
@@ -105,12 +103,10 @@ model TripRequest {
   message         String?
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @updatedAt @map("updated_at")
-
   // Relations
   trip      Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
   requester User @relation("RequestSender", fields: [requesterClerkId], references: [clerkId])
   receiver  User @relation("RequestReceiver", fields: [receiverClerkId], references: [clerkId])
-
   @@unique([tripId, requesterClerkId])
   @@map("trip_requests")
   @@index([tripId])
@@ -129,10 +125,8 @@ model Notification {
   read        Boolean           @default(false)
   createdAt   DateTime          @default(now()) @map("created_at")
   updatedAt   DateTime          @updatedAt @map("updated_at")
-
   // Relations
   user User @relation(fields: [userClerkId], references: [clerkId], onDelete: Cascade)
-
   @@map("notifications")
   @@index([userClerkId])
   @@index([read])
@@ -155,11 +149,11 @@ model Expense {
   splitMethod     SplitMethod    @default(EQUAL)
   createdAt       DateTime       @default(now()) @map("created_at")
   updatedAt       DateTime       @updatedAt @map("updated_at")
-
   // Relations
   trip      Trip           @relation(fields: [tripId], references: [id], onDelete: Cascade)
   paidBy    User           @relation(fields: [paidByClerkId], references: [clerkId])
   splits    ExpenseSplit[]
+  photos    TripPhoto[]    // New: Relation for photos linked to this expense
 
   @@map("expenses")
   @@index([tripId])
@@ -174,16 +168,39 @@ model ExpenseSplit {
   amount          Decimal @db.Decimal(10, 2)
   settled         Boolean @default(false)
   settledAt       DateTime? @map("settled_at")
-
   // Relations
   expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userClerkId], references: [clerkId])
-
   @@unique([expenseId, userClerkId])
   @@map("expense_splits")
   @@index([expenseId])
   @@index([userClerkId])
   @@index([settled])
+}
+
+// New Model for Trip Photos
+model TripPhoto {
+  id                String    @id @default(cuid())
+  tripId            String    @map("trip_id")
+  uploadedByClerkId String    @map("uploaded_by_clerk_id")
+  imageUrl          String    @map("image_url")
+  caption           String?
+  location          String?
+  date              DateTime? // For tagging to a specific day
+  expenseId         String?   @map("expense_id") // Optional: link to a specific expense
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  trip              Trip      @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  uploadedBy        User      @relation(fields: [uploadedByClerkId], references: [clerkId])
+  expense           Expense?  @relation(fields: [expenseId], references: [id]) // Optional relation
+
+  @@map("trip_photos")
+  @@index([tripId])
+  @@index([uploadedByClerkId])
+  @@index([expenseId])
+  @@index([date])
 }
 
 enum TripStatus {

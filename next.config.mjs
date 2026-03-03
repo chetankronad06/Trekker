@@ -29,6 +29,9 @@ const nextConfig = {
       },
     },
   },
+  serverActions: {
+    bodySizeLimit: '50mb', // or higher if needed
+  },
   webpack: (config, { isServer }) => {
     if (!isServer) {
       config.resolve.fallback = {

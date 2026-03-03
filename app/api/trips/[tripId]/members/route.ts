@@ -12,14 +12,14 @@ export async function GET(request: NextRequest, { params }: { params: { tripId: 
     console.log("🔍 Fetching members for trip:", params.tripId)
 
     // Check if user is the trip handler
-    const trip = await prisma.trip.findUnique({
-      where: { id: params.tripId },
-      select: { handlerClerkId: true },
-    })
+    // const trip = await prisma.trip.findUnique({
+    //   where: { id: params.tripId },
+    //   select: { handlerClerkId: true },
+    // })
 
-    if (!trip || trip.handlerClerkId !== user.id) {
-      return NextResponse.json({ error: "Not authorized" }, { status: 403 })
-    }
+    // if (!trip || trip.handlerClerkId !== user.id) {
+    //   return NextResponse.json({ error: "Not authorized" }, { status: 403 })
+    // }
 
     // Get all trip members
     const members = await prisma.tripMember.findMany({

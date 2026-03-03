@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast"
 import TripManagementSidebar from "@/components/trip-management-sidebar"
 import ExpenseTracker from "@/components/expense-tracker"
 import ExpenseList from "@/components/expense-list"
+import { TripMemoriesGallery } from "@/components/trip-memories-gallery"
 
 interface Trip {
   id: string
@@ -313,7 +314,7 @@ export default function TripDetailPage() {
                 >
                   {trip.status.toLowerCase()}
                 </Badge>
-                {isHandler && <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/50">Trip Handler</Badge>}
+                {isHandler && <Badge className="bg-green-500/20 text-green-400 border-green-500/50">Trip Handler</Badge>}
                 {!canAccessFeatures && (
                   <Badge className="bg-gray-500/20 text-gray-400 border-gray-500/50">Guest View</Badge>
                 )}
@@ -321,24 +322,14 @@ export default function TripDetailPage() {
               <div className="flex gap-2">
                 <Button
                   onClick={shareTrip}
-                  variant="outline"
                   size="sm"
-                  className="border-green-500/50 text-green-400 hover:bg-green-500/10 bg-transparent"
+                  className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white"
                 >
                   <Share2 className="w-4 h-4 mr-2" />
                   Share
                 </Button>
                 {isHandler && canAccessFeatures && (
                   <>
-                    <Button
-                      onClick={() => setShowInviteDialog(true)}
-                      variant="outline"
-                      size="sm"
-                      className="border-green-500/50 text-green-400 hover:bg-green-500/10"
-                    >
-                      <Users className="w-4 h-4 mr-2" />
-                      Invite
-                    </Button>
                     <TripManagementSidebar tripId={trip.id} tripName={trip.name} isHandler={isHandler} />
                   </>
                 )}
@@ -393,11 +384,10 @@ export default function TripDetailPage() {
                 </div>
                 <Button
                   onClick={copyInviteCode}
-                  variant="outline"
                   size="sm"
-                  className="border-gray-600 text-gray-300 hover:bg-gray-700 bg-transparent"
+                  className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white"
                 >
-                  <Copy className="w-4 h-4" />
+                  <Copy className="w-4 h-4 " />
                 </Button>
               </div>
               {trip.handler && (
@@ -412,7 +402,7 @@ export default function TripDetailPage() {
         {/* Tabs with Access Control - Fixed Height */}
         <div className="h-[600px] flex flex-col">
           <Tabs defaultValue="chat" className="flex-1 flex flex-col">
-            <TabsList className="grid w-full grid-cols-3 bg-gray-800/50 border-gray-700 flex-shrink-0">
+            <TabsList className="grid w-full grid-cols-4 bg-gray-800/50 border-gray-700 flex-shrink-0">
               <TabsTrigger
                 value="chat"
                 disabled={!canAccessFeatures}
@@ -435,6 +425,13 @@ export default function TripDetailPage() {
                 className="data-[state=active]:bg-green-500/20 data-[state=active]:text-green-400 text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 💰 Expenses {!canAccessFeatures && <Lock className="w-3 h-3 ml-1" />}
+              </TabsTrigger>
+              <TabsTrigger
+                value="memories"
+                disabled={!canAccessFeatures}
+                className="data-[state=active]:bg-green-500/20 data-[state=active]:text-green-400 text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                📸 Memories {!canAccessFeatures && <Lock className="w-3 h-3 ml-1" />}
               </TabsTrigger>
             </TabsList>
 
@@ -485,6 +482,17 @@ export default function TripDetailPage() {
                   title="Expense Tracking"
                   description="Join the trip to track and split expenses with other members"
                   icon={<span className="text-4xl">💰</span>}
+                />
+              )}
+            </TabsContent>
+            <TabsContent value="memories" className="flex-1 mt-6">
+              {canAccessFeatures ? (
+                <TripMemoriesGallery tripId={trip.id} />
+              ) : (
+                <DisabledFeatureCard
+                  title="Trip Memories"
+                  description="Join the trip to share and view photos & videos with other members"
+                  icon={<span className="text-4xl">📸</span>}
                 />
               )}
             </TabsContent>
