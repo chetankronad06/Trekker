@@ -1,4 +1,4 @@
-import { getTripPhotos } from "@/app/trips/[tripId]/actions"
+import { getTripPhotos } from "@/app/api/trips/[tripId]/photos/route"
 import { TripPhotoUpload } from "@/components/trip-photo-upload"
 import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card"
 import Image from "next/image"
