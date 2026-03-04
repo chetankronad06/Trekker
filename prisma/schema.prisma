@@ -16,18 +16,16 @@ model User {
   profileImageUrl  String?  @map("profile_image_url")
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
-  // Relations for trip management
+
   handledTrips     Trip[]        @relation("TripHandler")
   tripMemberships  TripMember[]
   tripMessages     TripMessage[]
-  // Relations for trip requests
   sentRequests     TripRequest[] @relation("RequestSender")
   receivedRequests TripRequest[] @relation("RequestReceiver")
-  // Relations for notifications and expenses
   notifications    Notification[]
   expenses         Expense[]
   expenseSplits    ExpenseSplit[]
-  uploadedPhotos   TripPhoto[]   // New: Relation for photos uploaded by this user
+  uploadedPhotos   TripPhoto[]
 
   @@map("users")
   @@index([clerkId])
@@ -46,17 +44,17 @@ model Trip {
   inviteCode         String     @unique @map("invite_code")
   createdAt          DateTime   @default(now()) @map("created_at")
   updatedAt          DateTime   @updatedAt @map("updated_at")
-  // New: Fields for scrapbook and sharing
   isScrapbookPublic  Boolean    @default(false) @map("is_scrapbook_public")
   scrapbookShareLink String?    @unique @map("scrapbook_share_link")
 
-  // Relations
-  handler            User          @relation("TripHandler", fields: [handlerClerkId], references: [clerkId])
-  members            TripMember[]
-  messages           TripMessage[]
-  requests           TripRequest[]
-  expenses           Expense[]
-  photos             TripPhoto[]   // New: Relation for trip photos
+  // ✅ CASCADE so deleting a handler user can delete their trips (and cascades further via tripId relations)
+  handler   User @relation("TripHandler", fields: [handlerClerkId], references: [clerkId], onDelete: Cascade)
+
+  members   TripMember[]
+  messages  TripMessage[]
+  requests  TripRequest[]
+  expenses  Expense[]
+  photos    TripPhoto[]
 
   @@map("trips")
   @@index([handlerClerkId])
@@ -71,9 +69,12 @@ model TripMember {
   joinedAt    DateTime   @default(now()) @map("joined_at")
   joinMethod  JoinMethod @default(UNKNOWN) @map("join_method")
   joinDetails String?    @map("join_details")
-  // Relations
+
   trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userClerkId], references: [clerkId])
+
+  // ✅ CASCADE
+  user User @relation(fields: [userClerkId], references: [clerkId], onDelete: Cascade)
+
   @@unique([tripId, userClerkId])
   @@map("trip_members")
   @@index([tripId])
@@ -86,27 +87,33 @@ model TripMessage {
   userClerkId String   @map("user_clerk_id")
   message     String
   createdAt   DateTime @default(now()) @map("created_at")
-  // Relations
+
   trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userClerkId], references: [clerkId])
+
+  // ✅ CASCADE
+  user User @relation(fields: [userClerkId], references: [clerkId], onDelete: Cascade)
+
   @@map("trip_messages")
   @@index([tripId])
   @@index([createdAt])
 }
 
 model TripRequest {
-  id              String        @id @default(cuid())
-  tripId          String        @map("trip_id")
-  requesterClerkId String       @map("requester_clerk_id")
-  receiverClerkId String        @map("receiver_clerk_id")
-  status          RequestStatus @default(PENDING)
-  message         String?
-  createdAt       DateTime      @default(now()) @map("created_at")
-  updatedAt       DateTime      @updatedAt @map("updated_at")
-  // Relations
-  trip      Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
-  requester User @relation("RequestSender", fields: [requesterClerkId], references: [clerkId])
-  receiver  User @relation("RequestReceiver", fields: [receiverClerkId], references: [clerkId])
+  id               String        @id @default(cuid())
+  tripId            String       @map("trip_id")
+  requesterClerkId  String       @map("requester_clerk_id")
+  receiverClerkId   String       @map("receiver_clerk_id")
+  status            RequestStatus @default(PENDING)
+  message           String?
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  // ✅ CASCADE
+  requester User @relation("RequestSender", fields: [requesterClerkId], references: [clerkId], onDelete: Cascade)
+  receiver  User @relation("RequestReceiver", fields: [receiverClerkId], references: [clerkId], onDelete: Cascade)
+
   @@unique([tripId, requesterClerkId])
   @@map("trip_requests")
   @@index([tripId])
@@ -125,8 +132,10 @@ model Notification {
   read        Boolean           @default(false)
   createdAt   DateTime          @default(now()) @map("created_at")
   updatedAt   DateTime          @updatedAt @map("updated_at")
-  // Relations
-  user User @relation(fields: [userClerkId], references: [clerkId], onDelete: Cascade)
+
+  // already CASCADE in your DB screenshot
+  user User @relation(fields: [userClerkId], references: [clerkId], onDelete: Cascade, onUpdate: Cascade)
+
   @@map("notifications")
   @@index([userClerkId])
   @@index([read])
@@ -134,26 +143,29 @@ model Notification {
 }
 
 model Expense {
-  id              String         @id @default(cuid())
-  tripId          String         @map("trip_id")
-  paidByClerkId   String         @map("paid_by_clerk_id")
-  amount          Decimal        @db.Decimal(10, 2)
-  description     String
-  category        ExpenseCategory @default(MISCELLANEOUS)
-  merchantName    String?        @map("merchant_name")
-  merchantUPI     String?        @map("merchant_upi")
-  transactionId   String?        @map("transaction_id")
-  paymentMethod   String?        @map("payment_method")
-  screenshotUrl   String?        @map("screenshot_url")
-  ocrData         Json?          @map("ocr_data")
-  splitMethod     SplitMethod    @default(EQUAL)
-  createdAt       DateTime       @default(now()) @map("created_at")
-  updatedAt       DateTime       @updatedAt @map("updated_at")
-  // Relations
-  trip      Trip           @relation(fields: [tripId], references: [id], onDelete: Cascade)
-  paidBy    User           @relation(fields: [paidByClerkId], references: [clerkId])
-  splits    ExpenseSplit[]
-  photos    TripPhoto[]    // New: Relation for photos linked to this expense
+  id             String          @id @default(cuid())
+  tripId         String          @map("trip_id")
+  paidByClerkId  String          @map("paid_by_clerk_id")
+  amount         Decimal         @db.Decimal(10, 2)
+  description    String
+  category       ExpenseCategory @default(MISCELLANEOUS)
+  merchantName   String?         @map("merchant_name")
+  merchantUPI    String?         @map("merchant_upi")
+  transactionId  String?         @map("transaction_id")
+  paymentMethod  String?         @map("payment_method")
+  screenshotUrl  String?         @map("screenshot_url")
+  ocrData        Json?           @map("ocr_data")
+  splitMethod    SplitMethod     @default(EQUAL)
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+
+  trip   Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  // ✅ CASCADE (this is the one currently throwing the error in your DB)
+  paidBy User @relation(fields: [paidByClerkId], references: [clerkId], onDelete: Cascade)
+
+  splits ExpenseSplit[]
+  photos TripPhoto[]
 
   @@map("expenses")
   @@index([tripId])
@@ -162,15 +174,18 @@ model Expense {
 }
 
 model ExpenseSplit {
-  id              String  @id @default(cuid())
-  expenseId       String  @map("expense_id")
-  userClerkId     String  @map("user_clerk_id")
-  amount          Decimal @db.Decimal(10, 2)
-  settled         Boolean @default(false)
-  settledAt       DateTime? @map("settled_at")
-  // Relations
+  id         String   @id @default(cuid())
+  expenseId  String   @map("expense_id")
+  userClerkId String  @map("user_clerk_id")
+  amount     Decimal  @db.Decimal(10, 2)
+  settled    Boolean  @default(false)
+  settledAt  DateTime? @map("settled_at")
+
   expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userClerkId], references: [clerkId])
+
+  // already CASCADE in your DB screenshot
+  user    User    @relation(fields: [userClerkId], references: [clerkId], onDelete: Cascade)
+
   @@unique([expenseId, userClerkId])
   @@map("expense_splits")
   @@index([expenseId])
@@ -178,7 +193,6 @@ model ExpenseSplit {
   @@index([settled])
 }
 
-// New Model for Trip Photos
 model TripPhoto {
   id                String    @id @default(cuid())
   tripId            String    @map("trip_id")
@@ -186,15 +200,17 @@ model TripPhoto {
   imageUrl          String    @map("image_url")
   caption           String?
   location          String?
-  date              DateTime? // For tagging to a specific day
-  expenseId         String?   @map("expense_id") // Optional: link to a specific expense
+  date              DateTime?
+  expenseId         String?   @map("expense_id")
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
-  // Relations
-  trip              Trip      @relation(fields: [tripId], references: [id], onDelete: Cascade)
-  uploadedBy        User      @relation(fields: [uploadedByClerkId], references: [clerkId])
-  expense           Expense?  @relation(fields: [expenseId], references: [id]) // Optional relation
+  trip       Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  // ✅ CASCADE
+  uploadedBy User     @relation(fields: [uploadedByClerkId], references: [clerkId], onDelete: Cascade)
+
+  expense    Expense? @relation(fields: [expenseId], references: [id])
 
   @@map("trip_photos")
   @@index([tripId])
