@@ -2,18 +2,20 @@ import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { currentUser } from "@clerk/nextjs/server"
 
-export async function DELETE(request: NextRequest, { params }: { params: { tripId: string; memberClerkId: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ tripId: string; memberClerkId: string }> }) {
   try {
     const user = await currentUser()
     if (!user) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
     }
 
-    console.log("🔍 Removing member:", params.memberClerkId, "from trip:", params.tripId)
+    const { tripId, memberClerkId } = await params
+
+    console.log("🔍 Removing member:", memberClerkId, "from trip:", tripId)
 
     // Check if user is the trip handler
     const trip = await prisma.trip.findUnique({
-      where: { id: params.tripId },
+      where: { id: tripId },
       select: { handlerClerkId: true, name: true },
     })
 
@@ -22,7 +24,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { tripI
     }
 
     // Cannot remove the trip handler
-    if (params.memberClerkId === user.id) {
+    if (memberClerkId === user.id) {
       return NextResponse.json(
         {
           error: "Cannot remove handler",
@@ -36,8 +38,8 @@ export async function DELETE(request: NextRequest, { params }: { params: { tripI
     const member = await prisma.tripMember.findUnique({
       where: {
         tripId_userClerkId: {
-          tripId: params.tripId,
-          userClerkId: params.memberClerkId,
+          tripId: tripId,
+          userClerkId: memberClerkId,
         },
       },
       include: {
@@ -68,16 +70,16 @@ export async function DELETE(request: NextRequest, { params }: { params: { tripI
       await tx.tripMember.delete({
         where: {
           tripId_userClerkId: {
-            tripId: params.tripId,
-            userClerkId: params.memberClerkId,
+            tripId: tripId,
+            userClerkId: memberClerkId,
           },
         },
       })
       await tx.tripRequest.delete({
         where: {
           tripId_requesterClerkId: {
-            tripId: params.tripId,
-            requesterClerkId: params.memberClerkId ,
+            tripId: tripId,
+            requesterClerkId: memberClerkId ,
           },
         },
       })
@@ -85,12 +87,12 @@ export async function DELETE(request: NextRequest, { params }: { params: { tripI
       // Create notification for the removed member
       await tx.notification.create({
         data: {
-          userClerkId: params.memberClerkId,
+          userClerkId: memberClerkId,
           type: "MEMBER_REMOVED",
           title: "Removed from Trip",
           message: `You have been removed from "${trip.name}" by the trip organizer.`,
           data: {
-            tripId: params.tripId,
+            tripId: tripId,
             tripName: trip.name,
             removedBy: user.id,
             removedAt: new Date().toISOString(),

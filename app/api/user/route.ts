@@ -1,41 +1,32 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { prisma, testDatabaseConnection } from "@/lib/prisma"
+import { prisma } from "@/lib/prisma"
 import { currentUser } from "@clerk/nextjs/server"
 
 // GET - Fetch user data
 export async function GET() {
   try {
-    // Test database connection first
-    const connectionTest = await testDatabaseConnection()
-    if (!connectionTest.success) {
-      return NextResponse.json(
-        {
-          error: "Database connection failed",
-          details: connectionTest.error,
-          suggestion: connectionTest.suggestion,
-        },
-        { status: 500 },
-      )
-    }
-
     const user = await currentUser()
 
     if (!user) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
     }
 
-    const dbUser = await prisma.user.findUnique({
+    let dbUser = await prisma.user.findUnique({
       where: { clerkId: user.id },
     })
 
     if (!dbUser) {
-      return NextResponse.json(
-        {
-          error: "User not found in database",
-          suggestion: "Try signing out and signing in again to sync your account",
+      console.log("🔄 User not found in DB, auto-creating during user profile GET...")
+      dbUser = await prisma.user.create({
+        data: {
+          clerkId: user.id,
+          email: user.emailAddresses[0]?.emailAddress || "",
+          firstName: user.firstName || "",
+          lastName: user.lastName || "",
+          profileImageUrl: user.imageUrl || null,
         },
-        { status: 404 },
-      )
+      })
+      console.log("✅ User auto-created in DB:", dbUser.clerkId)
     }
 
     return NextResponse.json({ user: dbUser })
@@ -54,19 +45,6 @@ export async function GET() {
 // PUT - Update user data
 export async function PUT(request: NextRequest) {
   try {
-    // Test database connection first
-    const connectionTest = await testDatabaseConnection()
-    if (!connectionTest.success) {
-      return NextResponse.json(
-        {
-          error: "Database connection failed",
-          details: connectionTest.error,
-          suggestion: connectionTest.suggestion,
-        },
-        { status: 500 },
-      )
-    }
-
     const user = await currentUser()
 
     if (!user) {

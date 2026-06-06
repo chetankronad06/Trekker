@@ -2,14 +2,16 @@ import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { currentUser } from "@clerk/nextjs/server"
 
-export async function POST(request: NextRequest, { params }: { params: { inviteCode: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ inviteCode: string }> }) {
   try {
     const user = await currentUser()
     if (!user) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
     }
 
-    console.log("🔍 Processing join request for invite code:", params.inviteCode)
+    const { inviteCode } = await params
+
+    console.log("🔍 Processing join request for invite code:", inviteCode)
     console.log("🔍 User ID:", user.id)
 
     // Ensure user exists in database first
@@ -37,7 +39,7 @@ export async function POST(request: NextRequest, { params }: { params: { inviteC
     // Find trip by invite code
     const trip = await prisma.trip.findUnique({
       where: {
-        inviteCode: params.inviteCode,
+        inviteCode: inviteCode,
       },
       select: {
         id: true,
@@ -211,13 +213,14 @@ export async function POST(request: NextRequest, { params }: { params: { inviteC
   }
 }
 
-export async function GET(request: NextRequest, { params }: { params: { inviteCode: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ inviteCode: string }> }) {
   try {
-    console.log("🔍 Fetching trip info for invite code:", params.inviteCode)
+    const { inviteCode } = await params
+    console.log("🔍 Fetching trip info for invite code:", inviteCode)
 
     const trip = await prisma.trip.findUnique({
       where: {
-        inviteCode: params.inviteCode,
+        inviteCode: inviteCode,
       },
       select: {
         id: true,

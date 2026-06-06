@@ -1,31 +1,21 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { prisma, testDatabaseConnection } from "@/lib/prisma"
+import { prisma } from "@/lib/prisma"
 import { currentUser } from "@clerk/nextjs/server"
+import { supabase } from "@/lib/supabase"
 
-export async function POST(request: NextRequest, { params }: { params: { tripId: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ tripId: string }> }) {
   try {
-    // Test database connection first
-    const connectionTest = await testDatabaseConnection()
-    if (!connectionTest.success) {
-      return NextResponse.json(
-        {
-          error: "Database connection failed",
-          details: connectionTest.error,
-          suggestion: connectionTest.suggestion,
-        },
-        { status: 500 },
-      )
-    }
-
     const user = await currentUser()
     if (!user) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
     }
 
+    const { tripId } = await params
+
     // Verify user is a member of this trip
     const membership = await prisma.tripMember.findFirst({
       where: {
-        tripId: params.tripId,
+        tripId: tripId,
         userClerkId: user.id,
       },
     })
@@ -50,7 +40,7 @@ export async function POST(request: NextRequest, { params }: { params: { tripId:
 
     const newMessage = await prisma.tripMessage.create({
       data: {
-        tripId: params.tripId,
+        tripId: tripId,
         userClerkId: user.id,
         message: message.trim(),
       },
@@ -65,14 +55,34 @@ export async function POST(request: NextRequest, { params }: { params: { tripId:
       },
     })
 
+    const formattedMessage = {
+      id: newMessage.id,
+      message: newMessage.message,
+      userId: newMessage.userClerkId,
+      userName: newMessage.user.firstName || newMessage.user.email,
+      createdAt: newMessage.createdAt.toISOString(),
+    }
+
+    // Broadcast message via Supabase Realtime Broadcast channel
+    try {
+      const channel = supabase.channel(`trip-${tripId}`)
+      channel.subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          channel.send({
+            type: "broadcast",
+            event: "new-message",
+            payload: formattedMessage,
+          }).then(() => {
+            supabase.removeChannel(channel)
+          })
+        }
+      })
+    } catch (realtimeErr) {
+      console.error("❌ Failed to broadcast message via Supabase Realtime:", realtimeErr)
+    }
+
     return NextResponse.json({
-      message: {
-        id: newMessage.id,
-        message: newMessage.message,
-        userId: newMessage.userClerkId,
-        userName: newMessage.user.firstName || newMessage.user.email,
-        createdAt: newMessage.createdAt.toISOString(),
-      },
+      message: formattedMessage,
     })
   } catch (error) {
     console.error("❌ Error sending message:", error)
@@ -86,30 +96,19 @@ export async function POST(request: NextRequest, { params }: { params: { tripId:
   }
 }
 
-export async function GET(request: NextRequest, { params }: { params: { tripId: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ tripId: string }> }) {
   try {
-    // Test database connection first
-    const connectionTest = await testDatabaseConnection()
-    if (!connectionTest.success) {
-      return NextResponse.json(
-        {
-          error: "Database connection failed",
-          details: connectionTest.error,
-          suggestion: connectionTest.suggestion,
-        },
-        { status: 500 },
-      )
-    }
-
     const user = await currentUser()
     if (!user) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
     }
 
+    const { tripId } = await params
+
     // Verify user is a member of this trip
     const membership = await prisma.tripMember.findFirst({
       where: {
-        tripId: params.tripId,
+        tripId: tripId,
         userClerkId: user.id,
       },
     })
@@ -124,12 +123,12 @@ export async function GET(request: NextRequest, { params }: { params: { tripId: 
       )
     }
 
-    console.log("🔍 Fetching messages for trip:", params.tripId)
+    console.log("🔍 Fetching messages for trip:", tripId)
 
     // Fetch messages with user details
     const messages = await prisma.tripMessage.findMany({
       where: {
-        tripId: params.tripId,
+        tripId: tripId,
       },
       include: {
         user: {

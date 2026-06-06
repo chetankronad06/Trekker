@@ -465,7 +465,7 @@ const processOCR = async (file: File) => {
 const fileToBase64 = (file: File): Promise<string> => {
       return new Promise((resolve, reject) => {
         const reader = new FileReader()
-        reader.onload = () => resolve(reader.response as string)
+        reader.onload = () => resolve(reader.result as string)
         reader.onerror = reject
         reader.readAsDataURL(file)
       })
@@ -487,7 +487,7 @@ const handleDragOver = (e: React.DragEvent) => {
           setSelectedFile(file)
           const reader = new FileReader()
           reader.onload = (e) => {
-            setPreviewUrl(e.target?.response as string)
+            setPreviewUrl(e.target?.result as string)
           }
           reader.readAsDataURL(file)
           processOCR(file)

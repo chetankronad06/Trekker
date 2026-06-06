@@ -345,7 +345,9 @@ export default function TripManagementSidebar({ tripId, tripName, isHandler }: T
                                 {member.user.firstName} {member.user.lastName}
                               </p>
                               {member.userClerkId === clerkUser?.id && (
-                                <Crown className="w-4 h-4 text-yellow-400" title="Trip Handler" />
+                                <span title="Trip Handler">
+                                  <Crown className="w-4 h-4 text-yellow-400" />
+                                </span>
                               )}
                             </div>
                             <p className="text-xs text-gray-400 truncate">{member.user.email}</p>

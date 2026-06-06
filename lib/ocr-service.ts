@@ -1,4 +1,4 @@
-import vision from "@google-cloud/vision"
+import { ImageAnnotatorClient } from "@google-cloud/vision"
 
 interface OCRResult {
   amount?: string
@@ -13,10 +13,10 @@ interface OCRResult {
 }
 
 class OCRService {
-  private client: vision.ImageAnnotatorClient
+  private client: ImageAnnotatorClient
 
   constructor() {
-    this.client = new vision.ImageAnnotatorClient({
+    this.client = new ImageAnnotatorClient({
       projectId: process.env.GOOGLE_CLOUD_PROJECT_ID,
       keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS,
     })

@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Loader2, UploadCloud, X, ImageIcon, Video } from "lucide-react"
 import { toast } from "sonner"
-import { uploadTripPhotos } from "@/app/api/trips/[tripId]/photos/route"
+import { uploadTripPhotos } from "@/app/api/trips/[tripId]/photos/actions"
 
 interface TripPhotoUploadProps {
   tripId: string

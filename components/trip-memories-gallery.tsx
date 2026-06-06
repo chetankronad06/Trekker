@@ -1,7 +1,7 @@
 "use client"
 import { useEffect, useState, useCallback } from "react"
 import Image from "next/image"
-import { getTripPhotos } from "@/app/api/trips/[tripId]/photos/route"
+import { getTripPhotos } from "@/app/api/trips/[tripId]/photos/actions"
 import { TripPhotoUpload } from "@/components/trip-photo-upload"
 import { Card, CardDescription, CardTitle } from "@/components/ui/card"
 import { MapPin, User, ImageIcon, Video, Loader2, PlusCircle } from "lucide-react"

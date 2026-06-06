@@ -1,31 +1,20 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { prisma, testDatabaseConnection } from "@/lib/prisma"
+import { prisma } from "@/lib/prisma"
 import { currentUser } from "@clerk/nextjs/server"
 
-export async function GET(request: NextRequest, { params }: { params: { tripId: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ tripId: string }> }) {
   try {
-    const connectionTest = await testDatabaseConnection()
-    if (!connectionTest.success) {
-      return NextResponse.json(
-        {
-          error: "Database connection failed",
-          details: connectionTest.error,
-          suggestion: connectionTest.suggestion,
-        },
-        { status: 500 },
-      )
-    }
-
     const user = await currentUser()
     if (!user) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
     }
 
-    console.log("🔍 Fetching public trip info:", params.tripId, "for user:", user.id)
+    const { tripId } = await params
+    console.log("🔍 Fetching public trip info:", tripId, "for user:", user.id)
 
     // Get basic trip information (public view)
     const trip = await prisma.trip.findUnique({
-      where: { id: params.tripId },
+      where: { id: tripId },
       include: {
         handler: {
           select: {

@@ -1,26 +1,16 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { prisma, testDatabaseConnection } from "@/lib/prisma"
+import { prisma } from "@/lib/prisma"
 import { currentUser } from "@clerk/nextjs/server"
 
 // PUT - Update request status (accept/reject)
-export async function PUT(request: NextRequest, { params }: { params: { requestId: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ requestId: string }> }) {
   try {
-    const connectionTest = await testDatabaseConnection()
-    if (!connectionTest.success) {
-      return NextResponse.json(
-        {
-          error: "Database connection failed",
-          details: connectionTest.error,
-          suggestion: connectionTest.suggestion,
-        },
-        { status: 500 },
-      )
-    }
-
     const user = await currentUser()
     if (!user) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
     }
+
+    const { requestId } = await params
 
     const body = await request.json().catch(() => ({}))
     const { action } = body // 'accept' or 'reject'
@@ -36,14 +26,14 @@ export async function PUT(request: NextRequest, { params }: { params: { requestI
     }
 
     console.log("🔄 Processing request action:", {
-      requestId: params.requestId,
+      requestId: requestId,
       action,
       userId: user.id,
     })
 
     // Get the request with trip details
     const tripRequest = await prisma.tripRequest.findUnique({
-      where: { id: params.requestId },
+      where: { id: requestId },
       include: {
         trip: true,
         requester: {
@@ -94,7 +84,7 @@ export async function PUT(request: NextRequest, { params }: { params: { requestI
     const result = await prisma.$transaction(async (tx) => {
       // Update the request status
       const updatedRequest = await tx.tripRequest.update({
-        where: { id: params.requestId },
+        where: { id: requestId },
         data: {
           status: newStatus,
           updatedAt: new Date(),
@@ -126,35 +116,35 @@ export async function PUT(request: NextRequest, { params }: { params: { requestI
           },
         })
         await tx.notification.create({
-        data: {
-          userClerkId:  tripRequest.requesterClerkId,
-          type: "REQUEST_ACCEPTED",
-          title: "Request Accepted",
-          message: `Your request to join "${tripRequest.trip.name}" has been accepted.`,
           data: {
-            tripId: tripRequest.tripId,
-            tripName: tripRequest.trip.name,
-            acceptedBy: user.id,
-            acceptedAt: new Date().toISOString(),
+            userClerkId: tripRequest.requesterClerkId,
+            type: "REQUEST_ACCEPTED",
+            title: "Request Accepted",
+            message: `Your request to join "${tripRequest.trip.name}" has been accepted.`,
+            data: {
+              tripId: tripRequest.tripId,
+              tripName: tripRequest.trip.name,
+              acceptedBy: user.id,
+              acceptedAt: new Date().toISOString(),
+            },
           },
-        },
-      })
+        })
       }
       if (newStatus === "REJECTED") {
         await tx.notification.create({
-        data: {
-          userClerkId:  tripRequest.requesterClerkId,
-          type: "REQUEST_REJECTED",
-          title: "Request Rejected",
-          message: `Your request to join "${tripRequest.trip.name}" has been rejected.`,
           data: {
-            tripId: tripRequest.tripId,
-            tripName: tripRequest.trip.name,
-            rejectedBy: user.id,
-            rejectedAt: new Date().toISOString(),
+            userClerkId: tripRequest.requesterClerkId,
+            type: "REQUEST_REJECTED",
+            title: "Request Rejected",
+            message: `Your request to join "${tripRequest.trip.name}" has been rejected.`,
+            data: {
+              tripId: tripRequest.tripId,
+              tripName: tripRequest.trip.name,
+              rejectedBy: user.id,
+              rejectedAt: new Date().toISOString(),
+            },
           },
-        },
-      })
+        })
       }
 
       return updatedRequest
@@ -179,33 +169,23 @@ export async function PUT(request: NextRequest, { params }: { params: { requestI
 }
 
 // DELETE - Cancel/delete a request
-export async function DELETE(request: NextRequest, { params }: { params: { requestId: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ requestId: string }> }) {
   try {
-    const connectionTest = await testDatabaseConnection()
-    if (!connectionTest.success) {
-      return NextResponse.json(
-        {
-          error: "Database connection failed",
-          details: connectionTest.error,
-          suggestion: connectionTest.suggestion,
-        },
-        { status: 500 },
-      )
-    }
-
     const user = await currentUser()
     if (!user) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
     }
 
+    const { requestId } = await params
+
     console.log("🔄 Deleting trip request:", {
-      requestId: params.requestId,
+      requestId: requestId,
       userId: user.id,
     })
 
     // Get the request
     const tripRequest = await prisma.tripRequest.findUnique({
-      where: { id: params.requestId },
+      where: { id: requestId },
     })
 
     if (!tripRequest) {
@@ -231,10 +211,10 @@ export async function DELETE(request: NextRequest, { params }: { params: { reque
 
     // Delete the request
     await prisma.tripRequest.delete({
-      where: { id: params.requestId },
+      where: { id: requestId },
     })
 
-    console.log("✅ Request deleted successfully:", params.requestId)
+    console.log("✅ Request deleted successfully:", requestId)
 
     return NextResponse.json({
       message: "Request cancelled successfully",

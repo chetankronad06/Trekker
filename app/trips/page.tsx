@@ -14,7 +14,7 @@ import Link from "next/link"
 import { CustomUserButton } from "@/components/custom-user-button"
 import CreateTripDialog from "@/components/create-trip-dialog"
 import { useToast } from "@/hooks/use-toast"
-import { getTripHighlightPhoto } from "@/app/api/trips/[tripId]/photos/route"
+import { getTripHighlightPhoto } from "@/app/api/trips/[tripId]/photos/actions"
 import Image from "next/image"
 
 interface Trip {

@@ -2,18 +2,19 @@ import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { currentUser } from "@clerk/nextjs/server"
 
-export async function GET(request: NextRequest, { params }: { params: { tripId: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ tripId: string }> }) {
   try {
     const user = await currentUser()
     if (!user) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
     }
 
-    console.log("🔍 Fetching members for trip:", params.tripId)
+    const { tripId } = await params
+    console.log("🔍 Fetching members for trip:", tripId)
 
     // Check if user is the trip handler
     // const trip = await prisma.trip.findUnique({
-    //   where: { id: params.tripId },
+    //   where: { id: tripId },
     //   select: { handlerClerkId: true },
     // })
 
@@ -23,7 +24,7 @@ export async function GET(request: NextRequest, { params }: { params: { tripId: 
 
     // Get all trip members
     const members = await prisma.tripMember.findMany({
-      where: { tripId: params.tripId },
+      where: { tripId: tripId },
       include: {
         user: {
           select: {

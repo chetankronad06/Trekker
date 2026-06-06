@@ -170,11 +170,11 @@ export default function ExpenseTracker({ tripId, onExpenseAdded }: ExpenseTracke
       case "qr-scanning":
         return <QRScanner onScanSuccess={handleQRScanSuccess} onClose={goBack} />
       case "payment-flow":
-        return <PaymentFlow upiData={scannedUPIData} onBack={goBack} onPaymentComplete={handlePaymentComplete} />
+        return <PaymentFlow upiData={scannedUPIData || undefined} onBack={goBack} onPaymentComplete={handlePaymentComplete} />
       case "screenshot-upload":
         return (
           <ScreenshotOCR
-            paymentData={paymentData}
+            paymentData={paymentData || undefined}
             onBack={goBack}
             onExpenseLogged={handleExpenseLogged}
             mode="after-payment"
@@ -185,7 +185,7 @@ export default function ExpenseTracker({ tripId, onExpenseAdded }: ExpenseTracke
       case "speech-input":
         return <SpeechToExpense onBack={goBack} onExpenseLogged={handleExpenseLogged} />
       case "manual-entry":
-        return <ManualExpenseEntry onBack={goBack} onExpenseLogged={handleExpenseLogged} />
+        return <ManualExpenseEntry tripId={tripId} onBack={goBack} onExpenseLogged={handleExpenseLogged} />
       default:
         return null
     }

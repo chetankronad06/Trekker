@@ -2,14 +2,14 @@ import { type NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
 
-export async function GET(request: NextRequest, { params }: { params: { tripId: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ tripId: string }> }) {
   try {
     const { userId } = await auth()
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { tripId } = params
+    const { tripId } = await params
 
     // Verify user is member of trip
     const membership = await prisma.tripMember.findUnique({
@@ -106,19 +106,19 @@ export async function GET(request: NextRequest, { params }: { params: { tripId: 
   }
 }
 
-export async function POST(request: NextRequest, { params }: { params: { tripId: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ tripId: string }> }) {
   try {
     const { userId } = await auth()
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { tripId } = params
+    const { tripId } = await params
     const body = await request.json()
-    const { amount, description, merchantName, transactionId, paymentMethod, category, notes, ocrData, speechData } =
+    const { amount, description, merchantName, transactionId, paymentMethod, category, notes, ocrData, speechData, splitMethod = "EQUAL", customSplits } =
       body
 
-    console.log("💰 Creating expense:", { amount, merchantName, paymentMethod, category })
+    console.log("💰 Creating expense:", { amount, merchantName, paymentMethod, category, splitMethod })
 
     // Verify user is member of trip
     const membership = await prisma.tripMember.findUnique({
@@ -158,6 +158,7 @@ export async function POST(request: NextRequest, { params }: { params: { tripId:
     }
 
     const expenseCategory = categoryMap[category] || "MISCELLANEOUS"
+    const methodEnum = splitMethod === "CUSTOM" ? "CUSTOM" : "EQUAL"
 
     // Create expense in database
     const expense = await prisma.expense.create({
@@ -170,8 +171,8 @@ export async function POST(request: NextRequest, { params }: { params: { tripId:
         merchantName: merchantName,
         transactionId: transactionId || `TXN${Date.now()}`,
         paymentMethod: paymentMethod || "UPI",
-        ocrData: ocrData ? JSON.stringify(ocrData) : null,
-        splitMethod: "EQUAL",
+        ocrData: ocrData ? (ocrData as any) : null,
+        splitMethod: methodEnum,
       },
       include: {
         paidBy: {
@@ -185,30 +186,57 @@ export async function POST(request: NextRequest, { params }: { params: { tripId:
       },
     })
 
-    // Create equal splits for all trip members
-    const splitAmount = amount / tripMembers.length
-    const splits = await Promise.all(
-      tripMembers.map((member) =>
-        prisma.expenseSplit.create({
-          data: {
-            expenseId: expense.id,
-            userClerkId: member.userClerkId,
-            amount: splitAmount,
-            settled: member.userClerkId === userId, // Mark as settled for the payer
-          },
-          include: {
-            user: {
-              select: {
-                clerkId: true,
-                firstName: true,
-                lastName: true,
-                profileImageUrl: true,
+    // Create splits based on split method
+    let splits = []
+    if (methodEnum === "CUSTOM" && customSplits && Array.isArray(customSplits)) {
+      splits = await Promise.all(
+        customSplits.map((splitItem: { userClerkId: string; amount: number }) =>
+          prisma.expenseSplit.create({
+            data: {
+              expenseId: expense.id,
+              userClerkId: splitItem.userClerkId,
+              amount: splitItem.amount,
+              settled: splitItem.userClerkId === userId, // Mark as settled for the payer
+            },
+            include: {
+              user: {
+                select: {
+                  clerkId: true,
+                  firstName: true,
+                  lastName: true,
+                  profileImageUrl: true,
+                },
               },
             },
-          },
-        }),
-      ),
-    )
+          })
+        )
+      )
+    } else {
+      // Create equal splits for all trip members
+      const splitAmount = amount / tripMembers.length
+      splits = await Promise.all(
+        tripMembers.map((member) =>
+          prisma.expenseSplit.create({
+            data: {
+              expenseId: expense.id,
+              userClerkId: member.userClerkId,
+              amount: splitAmount,
+              settled: member.userClerkId === userId, // Mark as settled for the payer
+            },
+            include: {
+              user: {
+                select: {
+                  clerkId: true,
+                  firstName: true,
+                  lastName: true,
+                  profileImageUrl: true,
+                },
+              },
+            },
+          })
+        )
+      )
+    }
 
     // Format response
     const formattedExpense = {

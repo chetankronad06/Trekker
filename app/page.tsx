@@ -66,7 +66,7 @@ export default function HomePage() {
 
       try {
         // Fetch all public trips
-        const allTripsResponse = await fetch("/api/trips/public")
+        const allTripsResponse = await fetch("/api/trips/all")
         if (allTripsResponse.ok) {
           const allTripsData = await allTripsResponse.json()
           setAllTrips(allTripsData.trips)

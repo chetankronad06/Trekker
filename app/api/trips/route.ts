@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs/server"
+import { auth, currentUser } from "@clerk/nextjs/server"
 import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { generateInviteCode } from "@/lib/utils/invite-code"
@@ -14,12 +14,26 @@ export async function POST(request: NextRequest) {
     const { name, description, startDate, endDate, startingPoint } = body
 
     // Ensure user exists in database
-    const user = await prisma.user.findUnique({
+    let user = await prisma.user.findUnique({
       where: { clerkId: userId },
     })
 
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
+      console.log("🔄 User not found in DB, auto-creating during trip creation...")
+      const clerkUser = await currentUser()
+      if (!clerkUser) {
+        return NextResponse.json({ error: "Not authenticated with Clerk" }, { status: 401 })
+      }
+      user = await prisma.user.create({
+        data: {
+          clerkId: userId,
+          email: clerkUser.emailAddresses[0]?.emailAddress || "",
+          firstName: clerkUser.firstName || "",
+          lastName: clerkUser.lastName || "",
+          profileImageUrl: clerkUser.imageUrl || null,
+        },
+      })
+      console.log("✅ User auto-created in DB:", user.clerkId)
     }
 
     const inviteCode = generateInviteCode()
@@ -68,6 +82,28 @@ export async function GET() {
     const { userId } = await auth()
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    // Ensure user exists in database
+    let dbUser = await prisma.user.findUnique({
+      where: { clerkId: userId },
+    })
+
+    if (!dbUser) {
+      console.log("🔄 User not found in DB, auto-creating during trips GET...")
+      const clerkUser = await currentUser()
+      if (clerkUser) {
+        dbUser = await prisma.user.create({
+          data: {
+            clerkId: userId,
+            email: clerkUser.emailAddresses[0]?.emailAddress || "",
+            firstName: clerkUser.firstName || "",
+            lastName: clerkUser.lastName || "",
+            profileImageUrl: clerkUser.imageUrl || null,
+          },
+        })
+        console.log("✅ User auto-created in DB:", dbUser.clerkId)
+      }
     }
 
     // Get trips where user is a member

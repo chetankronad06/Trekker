@@ -30,7 +30,7 @@ Only respond in JSON:
       messages,
     });
 
-    const reply = res.generated_text || res.choices?.[0]?.message?.content;
+    const reply = (res.generated_text || res.choices?.[0]?.message?.content || "") as string;
     const jsonMatch = reply?.match(/{[\s\S]*}/);
 
     if (!jsonMatch) {

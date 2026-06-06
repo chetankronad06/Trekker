@@ -1,21 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { prisma, testDatabaseConnection } from "@/lib/prisma"
+import { prisma } from "@/lib/prisma"
 
 export async function POST(request: NextRequest) {
   try {
-    // Test database connection first
-    const connectionTest = await testDatabaseConnection()
-    if (!connectionTest.success) {
-      return NextResponse.json(
-        {
-          error: "Database connection failed",
-          details: connectionTest.error,
-          suggestion: connectionTest.suggestion,
-        },
-        { status: 500 },
-      )
-    }
-
     const body = await request.json().catch(() => ({}))
     const { clerkId } = body
 

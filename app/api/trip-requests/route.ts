@@ -209,8 +209,8 @@ export async function POST(request: NextRequest) {
     const { tripId, targetUserClerkId, message, type } = body
 
     // Handle different types of requests
-    let requesterClerkId: string
-    let receiverClerkId: string
+    let requesterClerkId = ""
+    let receiverClerkId = ""
 
     if (type === "INVITE") {
       // Trip handler is inviting someone

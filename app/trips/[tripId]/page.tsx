@@ -44,6 +44,10 @@ interface TripRequest {
   status: string
   message: string
   createdAt: string
+  trip?: {
+    id: string
+    name: string
+  }
 }
 
 export default function TripDetailPage() {

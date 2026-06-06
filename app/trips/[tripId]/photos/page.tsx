@@ -1,4 +1,4 @@
-import { getTripPhotos } from "@/app/api/trips/[tripId]/photos/route"
+import { getTripPhotos } from "@/app/api/trips/[tripId]/photos/actions"
 import { TripPhotoUpload } from "@/components/trip-photo-upload"
 import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card"
 import Image from "next/image"
@@ -6,13 +6,13 @@ import { format } from "date-fns"
 import { MapPin, CalendarDays, User } from "lucide-react"
 
 interface TripPhotosPageProps {
-  params: {
+  params: Promise<{
     tripId: string
-  }
+  }>
 }
 
 export default async function TripPhotosPage({ params }: TripPhotosPageProps) {
-  const { tripId } = params
+  const { tripId } = await params
   const { photos, error } = await getTripPhotos(tripId)
 
   if (error) {

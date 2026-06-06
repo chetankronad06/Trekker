@@ -9,8 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Send, MessageCircle, Users, Clock, Loader2, Receipt } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { connectSocket, disconnectSocket } from "@/lib/socket"
-import type { Socket } from "socket.io-client"
+import { supabase } from "@/lib/supabase"
 
 interface Message {
   id: string
@@ -39,7 +38,6 @@ export default function TripChat({ tripId }: TripChatProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [isSending, setIsSending] = useState(false)
   const [onlineUsers, setOnlineUsers] = useState<string[]>([])
-  const [socket, setSocket] = useState<Socket | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Scroll to bottom
@@ -67,30 +65,38 @@ export default function TripChat({ tripId }: TripChatProps) {
     fetchMessages()
   }, [tripId])
 
-  // Socket connection
+  // Supabase Realtime connection
   useEffect(() => {
     if (!clerkUser) return
 
-    const socketInstance = connectSocket(clerkUser.id)
-    setSocket(socketInstance)
+    const channel = supabase.channel(`trip-${tripId}`)
 
-    socketInstance.emit("join-trip", tripId)
-
-    socketInstance.on("new-message", (message: Message) => {
-      setMessages((prev) => {
-        const messageExists = prev.some((existingMessage) => existingMessage.id === message.id)
-        if (messageExists) return prev
-        return [...prev, message]
+    channel
+      .on("broadcast", { event: "new-message" }, (response) => {
+        const message = response.payload
+        setMessages((prev) => {
+          const messageExists = prev.some((existingMessage) => existingMessage.id === message.id)
+          if (messageExists) return prev
+          return [...prev, message]
+        })
       })
-    })
-
-    socketInstance.on("online-users", (users: string[]) => {
-      setOnlineUsers(users)
-    })
+      .on("presence", { event: "sync" }, () => {
+        const state = channel.presenceState()
+        // Map the online user ids from presence state
+        const userIds = Object.keys(state)
+        setOnlineUsers(userIds)
+      })
+      .subscribe(async (status) => {
+        if (status === "SUBSCRIBED") {
+          await channel.track({
+            user_id: clerkUser.id,
+            online_at: new Date().toISOString(),
+          })
+        }
+      })
 
     return () => {
-      socketInstance.emit("leave-trip", tripId)
-      disconnectSocket()
+      channel.unsubscribe()
     }
   }, [tripId, clerkUser])
 

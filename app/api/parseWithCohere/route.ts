@@ -3,7 +3,7 @@ import { CohereClient } from "cohere-ai";
 
 console.log("Loaded Cohere key:", process.env.COHERE_API_KEY); // Debug line
 
-const cohere = new CohereClient({ apiKey: process.env.COHERE_API_KEY! });
+const cohere = new CohereClient({ token: process.env.COHERE_API_KEY! });
 
 export async function POST(req: NextRequest) {
   const { rawText } = await req.json();
@@ -30,7 +30,7 @@ Raw OCR Text: """${rawText}"""
     const response = await cohere.generate({
       model: "command",
       prompt,
-      max_tokens: 200,
+      maxTokens: 200,
       temperature: 0.1,
     });
 
@@ -38,7 +38,7 @@ Raw OCR Text: """${rawText}"""
     const jsonMatch = content.match(/{[\s\S]*}/);
     if (!jsonMatch) return NextResponse.json({ result: null, error: "No JSON in AI reply" }, { status: 200 });
 
-    let parsed = {};
+    let parsed: any = {};
     try {
       parsed = JSON.parse(jsonMatch[0]);
     } catch {
