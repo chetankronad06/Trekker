@@ -1,9 +1,16 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server"
-
-const isProtectedRoute = createRouteMatcher(["/profile(.*)", "/", "/trips(.*)", "/dashboard(.*)"])
+import { clerkMiddleware } from "@clerk/nextjs/server"
 
 export default clerkMiddleware(async (auth, req) => {
-  if (isProtectedRoute(req)) {
+  const url = new URL(req.url)
+  const path = url.pathname
+
+  // Protect profile, dashboard, and trips (except previews)
+  const isProtected =
+    path.startsWith("/profile") ||
+    path.startsWith("/dashboard") ||
+    (path.startsWith("/trips") && !path.endsWith("/preview") && !path.includes("/preview/"))
+
+  if (isProtected) {
     await auth.protect()
   }
 })

@@ -64,6 +64,7 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
     const dbUser = await getOrCreateUser(clerkUser)
+    const userId = clerkUser.id
 
     // Get trips where user is a member
     const trips = await prisma.trip.findMany({
