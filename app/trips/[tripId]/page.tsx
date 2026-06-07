@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Users, Share2, MessageCircle, MapPin, Calendar, AlertTriangle, Copy, Send, Clock, X, Lock } from "lucide-react"
+import { Users, Share2, MessageCircle, MapPin, Calendar, AlertTriangle, Copy, Send, Clock, X, Lock, TrendingUp } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { CustomUserButton } from "@/components/custom-user-button"
 import TripChat from "@/components/trip-chat"
@@ -19,6 +19,7 @@ import TripManagementSidebar from "@/components/trip-management-sidebar"
 import ExpenseTracker from "@/components/expense-tracker"
 import ExpenseList from "@/components/expense-list"
 import { TripMemoriesGallery } from "@/components/trip-memories-gallery"
+import TripBalances from "@/components/trip-balances"
 
 interface Trip {
   id: string
@@ -249,17 +250,19 @@ export default function TripDetailPage() {
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
       <div className="container mx-auto p-4 max-w-7xl">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-r from-green-500 to-green-600 rounded-full flex items-center justify-center">
+            <div className="w-10 h-10 bg-gradient-to-r from-green-500 to-green-600 rounded-full flex items-center justify-center flex-shrink-0">
               <MapPin className="w-5 h-5 text-white" />
             </div>
             <div>
               <h1 className="text-xl sm:text-2xl font-bold text-white line-clamp-1">{trip.name}</h1>
-              <p className="text-gray-400 text-sm">{trip.description || "No description"}</p>
+              <p className="text-gray-400 text-sm line-clamp-1">{trip.description || "No description"}</p>
             </div>
           </div>
-          <CustomUserButton />
+          <div className="flex justify-end flex-shrink-0">
+            <CustomUserButton />
+          </div>
         </div>
 
         {/* Alerts */}
@@ -403,14 +406,14 @@ export default function TripDetailPage() {
           </CardContent>
         </Card>
 
-        {/* Tabs with Access Control - Fixed Height */}
-        <div className="h-[600px] flex flex-col">
+        {/* Tabs with Access Control - Responsive Height */}
+        <div className="h-auto md:h-[650px] flex flex-col pb-8">
           <Tabs defaultValue="chat" className="flex-1 flex flex-col">
-            <TabsList className="grid w-full grid-cols-4 bg-gray-800/50 border-gray-700 flex-shrink-0">
+            <TabsList className="flex w-full overflow-x-auto whitespace-nowrap bg-gray-800/50 border-gray-700 flex-shrink-0 p-1 justify-start md:grid md:grid-cols-5 md:justify-center rounded-lg scrollbar-none">
               <TabsTrigger
                 value="chat"
                 disabled={!canAccessFeatures}
-                className="data-[state=active]:bg-green-500/20 data-[state=active]:text-green-400 text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 md:flex-initial py-2 px-3 data-[state=active]:bg-green-500/20 data-[state=active]:text-green-400 text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed text-xs sm:text-sm"
               >
                 <MessageCircle className="w-4 h-4 mr-2" />
                 Chat {!canAccessFeatures && <Lock className="w-3 h-3 ml-1" />}
@@ -418,7 +421,7 @@ export default function TripDetailPage() {
               <TabsTrigger
                 value="members"
                 disabled={!canAccessFeatures}
-                className="data-[state=active]:bg-green-500/20 data-[state=active]:text-green-400 text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 md:flex-initial py-2 px-3 data-[state=active]:bg-green-500/20 data-[state=active]:text-green-400 text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed text-xs sm:text-sm"
               >
                 <Users className="w-4 h-4 mr-2" />
                 Members {!canAccessFeatures && <Lock className="w-3 h-3 ml-1" />}
@@ -426,20 +429,28 @@ export default function TripDetailPage() {
               <TabsTrigger
                 value="expenses"
                 disabled={!canAccessFeatures}
-                className="data-[state=active]:bg-green-500/20 data-[state=active]:text-green-400 text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 md:flex-initial py-2 px-3 data-[state=active]:bg-green-500/20 data-[state=active]:text-green-400 text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed text-xs sm:text-sm"
               >
                 💰 Expenses {!canAccessFeatures && <Lock className="w-3 h-3 ml-1" />}
               </TabsTrigger>
               <TabsTrigger
+                value="balances"
+                disabled={!canAccessFeatures}
+                className="flex-1 md:flex-initial py-2 px-3 data-[state=active]:bg-green-500/20 data-[state=active]:text-green-400 text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed text-xs sm:text-sm"
+              >
+                <TrendingUp className="w-4 h-4 mr-2" />
+                Balances {!canAccessFeatures && <Lock className="w-3 h-3 ml-1" />}
+              </TabsTrigger>
+              <TabsTrigger
                 value="memories"
                 disabled={!canAccessFeatures}
-                className="data-[state=active]:bg-green-500/20 data-[state=active]:text-green-400 text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 md:flex-initial py-2 px-3 data-[state=active]:bg-green-500/20 data-[state=active]:text-green-400 text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed text-xs sm:text-sm"
               >
                 📸 Memories {!canAccessFeatures && <Lock className="w-3 h-3 ml-1" />}
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="chat" className="flex-1 mt-6">
+            <TabsContent value="chat" className="flex-1 mt-6 min-h-[400px]">
               {canAccessFeatures ? (
                 <TripChat tripId={trip.id} />
               ) : (
@@ -451,7 +462,7 @@ export default function TripDetailPage() {
               )}
             </TabsContent>
 
-            <TabsContent value="members" className="flex-1 mt-6">
+            <TabsContent value="members" className="flex-1 mt-6 min-h-[400px]">
               {canAccessFeatures ? (
                 <TripMembers tripId={trip.id} />
               ) : (
@@ -463,7 +474,7 @@ export default function TripDetailPage() {
               )}
             </TabsContent>
 
-            <TabsContent value="expenses" className="flex-1 mt-6">
+            <TabsContent value="expenses" className="flex-1 mt-6 min-h-[400px]">
               {canAccessFeatures ? (
                 <Card className="bg-gray-800/90 backdrop-blur-sm border-gray-700 shadow-2xl h-full flex flex-col">
                   <CardHeader className="flex-shrink-0">
@@ -489,7 +500,20 @@ export default function TripDetailPage() {
                 />
               )}
             </TabsContent>
-            <TabsContent value="memories" className="flex-1 mt-6">
+
+            <TabsContent value="balances" className="flex-1 mt-6 min-h-[400px]">
+              {canAccessFeatures ? (
+                <TripBalances tripId={trip.id} members={trip.members} />
+              ) : (
+                <DisabledFeatureCard
+                  title="Balances & Settlements"
+                  description="Join the trip to view outstanding debts and settle up with friends"
+                  icon={<TrendingUp className="w-8 h-8" />}
+                />
+              )}
+            </TabsContent>
+
+            <TabsContent value="memories" className="flex-1 mt-6 min-h-[400px]">
               {canAccessFeatures ? (
                 <TripMemoriesGallery tripId={trip.id} />
               ) : (

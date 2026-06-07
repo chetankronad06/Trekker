@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -14,6 +15,7 @@ model User {
   firstName        String   @map("first_name")
   lastName         String   @map("last_name")
   profileImageUrl  String?  @map("profile_image_url")
+  upiId            String?  @map("upi_id")
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
 

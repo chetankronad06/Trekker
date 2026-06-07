@@ -37,7 +37,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json().catch(() => ({}))
-    const { firstName, lastName, email } = body
+    const { firstName, lastName, email, upiId } = body
 
     if (!firstName || !lastName || !email) {
       return NextResponse.json(
@@ -56,6 +56,7 @@ export async function PUT(request: NextRequest) {
         firstName,
         lastName,
         email,
+        upiId,
       },
     })
 

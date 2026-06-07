@@ -450,7 +450,7 @@ export default function HomePage() {
                         <div className="flex items-center gap-3">
                           <span className="text-lg">{MEMBER_AVATARS[set.from]}</span>
                           <span className="text-white font-medium">{set.from}</span>
-                          <span className="text-gray-500 text-xs px-2 py-0.5 border border-gray-800 rounded bg-gray-950 font-mono">Debtor</span>
+                          <span className="hidden sm:inline-block text-gray-500 text-xs px-2 py-0.5 border border-gray-800 rounded bg-gray-950 font-mono">Debtor</span>
                         </div>
 
                         <div className="flex flex-col items-center flex-1 px-4">
@@ -462,7 +462,7 @@ export default function HomePage() {
                         </div>
 
                         <div className="flex items-center gap-3">
-                          <span className="text-gray-500 text-xs px-2 py-0.5 border border-gray-800 rounded bg-gray-950 font-mono">Creditor</span>
+                          <span className="hidden sm:inline-block text-gray-500 text-xs px-2 py-0.5 border border-gray-800 rounded bg-gray-950 font-mono">Creditor</span>
                           <span className="text-white font-medium">{set.to}</span>
                           <span className="text-lg">{MEMBER_AVATARS[set.to]}</span>
                         </div>

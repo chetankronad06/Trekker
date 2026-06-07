@@ -40,6 +40,7 @@ interface DatabaseUser {
   firstName: string
   lastName: string
   profileImageUrl: string | null
+  upiId: string | null
   createdAt: string
   updatedAt: string
 }
@@ -93,6 +94,7 @@ export default function ProfilePage() {
     firstName: "",
     lastName: "",
     email: "",
+    upiId: "",
   })
 
   // Trip requests state
@@ -130,6 +132,7 @@ export default function ProfilePage() {
             firstName: data.user.firstName,
             lastName: data.user.lastName,
             email: data.user.email,
+            upiId: data.user.upiId || "",
           })
         } else if (response.status === 404) {
           // User not found in database, sync them
@@ -171,6 +174,7 @@ export default function ProfilePage() {
           firstName: data.user.firstName,
           lastName: data.user.lastName,
           email: data.user.email,
+          upiId: data.user.upiId || "",
         })
       }
     } catch (err) {
@@ -284,6 +288,7 @@ export default function ProfilePage() {
         firstName: dbUser.firstName,
         lastName: dbUser.lastName,
         email: dbUser.email,
+        upiId: dbUser.upiId || "",
       })
     }
     setIsEditing(false)
@@ -625,6 +630,27 @@ export default function ProfilePage() {
                           <div className="p-3 bg-gray-700/30 rounded-md text-white flex items-center">
                             <Mail className="w-4 h-4 mr-2 text-gray-400" />
                             {dbUser.email}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="space-y-2 md:col-span-2">
+                        <Label htmlFor="upiId" className="text-gray-300">
+                          UPI ID / Virtual Payment Address
+                        </Label>
+                        {isEditing ? (
+                          <Input
+                            id="upiId"
+                            name="upiId"
+                            placeholder="e.g. username@okaxis or 9876543210@upi"
+                            value={editForm.upiId}
+                            onChange={handleInputChange}
+                            className="bg-gray-700/50 border-gray-600 text-white focus:border-blue-500"
+                          />
+                        ) : (
+                          <div className="p-3 bg-gray-700/30 rounded-md text-white flex items-center">
+                            <span className="font-semibold text-blue-400 mr-2">UPI:</span>
+                            {dbUser.upiId || <span className="text-gray-500 italic">Not set (needed for friends to settle up with QR code)</span>}
                           </div>
                         )}
                       </div>
