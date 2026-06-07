@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { currentUser } from "@clerk/nextjs/server"
+import { getOrCreateUser } from "@/lib/user"
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ inviteCode: string }> }) {
   try {
@@ -14,24 +15,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     console.log("🔍 Processing join request for invite code:", inviteCode)
     console.log("🔍 User ID:", user.id)
 
-    // Ensure user exists in database first
-    let dbUser = await prisma.user.findUnique({
-      where: { clerkId: user.id },
-    })
-
-    if (!dbUser) {
-      console.log("🔄 User not found in DB, creating...")
-      dbUser = await prisma.user.create({
-        data: {
-          clerkId: user.id,
-          email: user.emailAddresses[0]?.emailAddress || "",
-          firstName: user.firstName || "",
-          lastName: user.lastName || "",
-          profileImageUrl: user.imageUrl || null,
-        },
-      })
-      console.log("✅ User created in DB:", dbUser.clerkId)
-    }
+    const dbUser = await getOrCreateUser(user)
 
     const body = await request.json().catch(() => ({}))
     const { message, checkOnly } = body

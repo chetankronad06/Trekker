@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
+import { syncUserToDb } from "@/lib/user"
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,49 +23,20 @@ export async function POST(request: NextRequest) {
       lastName: lastName || "User",
     })
 
-    // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { clerkId },
+    const user = await syncUserToDb({
+      clerkId,
+      email,
+      firstName: firstName || "Unknown",
+      lastName: lastName || "User",
+      profileImageUrl: profileImageUrl || null,
     })
 
-    if (existingUser) {
-      // Update existing user with latest info
-      const updatedUser = await prisma.user.update({
-        where: { clerkId },
-        data: {
-          email,
-          firstName: firstName || existingUser.firstName,
-          lastName: lastName || existingUser.lastName,
-          profileImageUrl: profileImageUrl || existingUser.profileImageUrl,
-        },
-      })
-
-      console.log("✅ User updated successfully:", updatedUser.id)
-
-      return NextResponse.json({
-        message: "User updated successfully",
-        user: updatedUser,
-        isNew: false,
-      })
-    }
-
-    // Create new user in database
-    const user = await prisma.user.create({
-      data: {
-        clerkId,
-        email,
-        firstName: firstName || "Unknown",
-        lastName: lastName || "User",
-        profileImageUrl: profileImageUrl || null,
-      },
-    })
-
-    console.log("🎉 New user created successfully:", user.id)
+    console.log("🎉 User synced successfully:", user.id)
 
     return NextResponse.json({
-      message: "User created successfully",
+      message: "User synced successfully",
       user,
-      isNew: true,
+      isNew: false,
     })
   } catch (error) {
     console.error("❌ Error syncing user:", error)

@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { currentUser } from "@clerk/nextjs/server"
+import { getOrCreateUser } from "@/lib/user"
 
 // GET - Fetch user data
 export async function GET() {
@@ -11,23 +12,7 @@ export async function GET() {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
     }
 
-    let dbUser = await prisma.user.findUnique({
-      where: { clerkId: user.id },
-    })
-
-    if (!dbUser) {
-      console.log("🔄 User not found in DB, auto-creating during user profile GET...")
-      dbUser = await prisma.user.create({
-        data: {
-          clerkId: user.id,
-          email: user.emailAddresses[0]?.emailAddress || "",
-          firstName: user.firstName || "",
-          lastName: user.lastName || "",
-          profileImageUrl: user.imageUrl || null,
-        },
-      })
-      console.log("✅ User auto-created in DB:", dbUser.clerkId)
-    }
+    const dbUser = await getOrCreateUser(user)
 
     return NextResponse.json({ user: dbUser })
   } catch (error) {

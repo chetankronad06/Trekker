@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { currentUser } from "@clerk/nextjs/server"
+import { getOrCreateUser } from "@/lib/user"
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,24 +12,7 @@ export async function GET(request: NextRequest) {
 
     console.log("🔍 Fetching all available trips for user:", user.id)
 
-    // Ensure user exists in database
-    let dbUser = await prisma.user.findUnique({
-      where: { clerkId: user.id },
-    })
-
-    if (!dbUser) {
-      console.log("🔄 User not found in DB, creating...")
-      dbUser = await prisma.user.create({
-        data: {
-          clerkId: user.id,
-          email: user.emailAddresses[0]?.emailAddress || "",
-          firstName: user.firstName || "",
-          lastName: user.lastName || "",
-          profileImageUrl: user.imageUrl || null,
-        },
-      })
-      console.log("✅ User created in DB:", dbUser.clerkId)
-    }
+    const dbUser = await getOrCreateUser(user)
 
     // Get all trips with handler and member count info
     const trips = await prisma.trip.findMany({
