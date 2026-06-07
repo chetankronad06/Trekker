@@ -51,25 +51,6 @@ export default function SignInPage() {
     setError("")
   }
 
-  const checkUserExistsInDatabase = async (clerkId: string): Promise<boolean> => {
-    try {
-      const response = await fetch("/api/user/check", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clerkId }),
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        return data.exists
-      }
-      return false
-    } catch (error) {
-      console.error("Error checking user:", error)
-      return false
-    }
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -86,15 +67,6 @@ export default function SignInPage() {
 
       if (result.status === "complete" && result.createdSessionId) {
         await setActive({ session: result.createdSessionId })
-
-        // Check if user exists in our database
-        const userExists = await checkUserExistsInDatabase(result.createdSessionId)
-
-        if (!userExists) {
-          setError("🧳 Ready to start your journey? Please create your traveler account first!")
-          return
-        }
-
         router.push("/profile")
       }
     } catch (err: unknown) {
